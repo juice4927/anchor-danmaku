@@ -25,7 +25,7 @@ import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 
 class BiliLiveGateway(
-    client: OkHttpClient,
+    private val client: OkHttpClient,
     private val roomApi: BiliRoomApi,
     private val diagnostics: SafeDiagnostics = SafeDiagnostics(),
     private val packetCodec: BiliPacketCodec = BiliPacketCodec(diagnostics = diagnostics),
@@ -33,15 +33,9 @@ class BiliLiveGateway(
     private val webSocketUrlBuilder: (String, Int) -> HttpUrl = { host, port -> BiliHostValidator.buildWssUrl(host, port) },
     private val sessionLifetimeMillis: Long = DEFAULT_SESSION_LIFETIME_MILLIS,
 ) : LiveGateway {
-    private val client = client.newBuilder()
-        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-        // WebSocket 建立后 readTimeout 会在静默期误断：B站低流量直播间两次心跳间隔 30 秒，
-        // 期间可能无任何帧，10 秒 readTimeout 会频繁断开重连、丢弃重连窗口内的弹幕。
-        // 存活检测交给应用层的 idle 检测与 op=2 心跳。
-        .readTimeout(0, java.util.concurrent.TimeUnit.MILLISECONDS)
-        .callTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-        .build()
-
+    // 超时配置由装配方（AppContainer）统一注入：WS 建立后 readTimeout 会在静默期误断，
+    // 低流量直播间两次心跳间隔 30 秒，期间可能无任何帧；存活检测交给应用层 idle 检测
+    // 与 op=2 心跳，因此 WS client 使用 readTimeout=0。
     override fun createSession(inputRoomId: Long): GatewaySession = Session(inputRoomId)
 
     inner class Session(

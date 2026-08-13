@@ -1,92 +1,109 @@
-# 优化方案（项目盘点）
+# 优化方案 v2（P0 完成后）
 
-基于对全量源码、构建脚本、测试与文档的审阅。项目整体质量很高：模块边界清晰、协议边界防护完善、离线验证门完整（152 项 JVM 测试、覆盖率门、Release 卫生门）。以下按优先级列出可优化项，P0 为正确性/可靠性问题，P1 为性能热点，P2 为构建与工具链，P3 为产品增强。
+P0 七项可靠性修复已全部完成并通过 `verifyAll` 全门（见 `docs/implementation-log.md` 阶段 14）。本版方案聚焦下一批可执行优化：P1 性能与热路径、P2 构建与工具链、P3 产品体验。每项标注了改动范围与验证方式，可直接按序实施。
 
-## P0 正确性与可靠性
+## P1 性能与热路径（建议先做）
 
-> 状态：✅ 已完成（详见 `docs/implementation-log.md` 阶段 14）。
+### P1-1 删除双套消息模型，UI 直接消费 core 模型 ⭐ 最高收益
 
-1. **去重窗口为 0，去重实际不生效** ✅
-   `MessageDeduplicator.WINDOW_MILLIS = 0L`，只有同毫秒内相同 id 的消息才会被去重，跨毫秒的重复帧（重连、TCP 重发）会重复进入管线（部分被 3 秒合并器合并成 ×N，超出窗口的会重复展示）。
-   修复：窗口改为 10 秒；清理改为仅在接近容量时执行（O(1) 摊还）。窗口不能更大：弹幕 id 含按秒的服务端时间戳，同用户同秒同文本会被视为同 id，过长的窗口会吞掉 3 秒合并器的 ×N 计数。
+现状：`core:model` 的 `LiveMessage` 与 app 层 `AnchorModels.kt`（`AnchorMessage`）完全平行，且存在两份双向转换（`AnchorSessionRepository.kt` 与 `RoomViewModel.kt` 各一份 `toCoreMessage`/`toAnchorMessage`）。每条消息都要多态转换，`applyPipelineState` 对全量列表（最多 500 条）逐条 map，高流量房间每秒数万次对象分配，是滚动抖动的主要来源。
 
-2. **弹幕合并窗口表无限增长** ✅
-   `DanmakuCoalescer.windows` 是 `linkedMapOf`，只按 key 覆盖、从不按时间清理。高流量直播间运行数小时后，不同 (uid, text) 组合会累积成千上万条目，长期占用内存。
-   修复：新增 4,096 窗口上限；加入新窗口前先清理过期项、再淘汰最旧，保证存活窗口不被误杀。
+方案：
+- 删除 `AnchorModels.kt` 的 4 个消息 data class 与 `displayName()`，UI/Repository/ViewModel 直接使用 `core:model` 的 `LiveMessage`（纯 Kotlin 数据类，无 Android 依赖，UI 可用）。
+- 展示文案（`displayName`、`pinLabel`、颜色映射、`describeMessage`）改为 `core:model` 的扩展函数，放在 app 的 ui 包。
+- `AnchorConnectionState`/`AnchorFailureKind`/`ConnectionPhase` 是 UI 状态模型，保留（它们不是消息模型，且承载展示文本）。
+- 验证：app 单元测试 + instrumentation 测试全部回归；`describeMessage` 等逻辑抽成纯函数后可补单测。
 
-3. **WebSocket 事件通道无界** ✅
-   `BiliWebSocketSession` 使用 `Channel(UNLIMITED)`。若下游解析/消费暂时变慢，帧会在通道中无界堆积，极端高流量下有 OOM 风险。
-   修复：有界通道（容量 256）+ `DROP_OLDEST`，直播场景最新内容优先；关闭/失败事件被丢弃时由 SessionController 的 90 秒 idle 看门狗兜底重连。
+### P1-2 MessageRow 移除 `IntrinsicSize.Min`（新发现）
 
-4. **前台服务每个状态变化都调用 startForeground** ✅
-   `ConnectionForegroundService.ensureNotificationSync` 用 `collectLatest { startForeground(...) }`，而高流量房间每个数据包都会触发 `SessionState.Connected.copy(lastFrameAtMillis=...)` 状态更新，即每秒几十上百次 startForeground + Binder 事务。
-   修复：首次 startForeground 后，后续仅当通知内容文本变化时调用 `NotificationManager.notify()`（内容相同直接跳过，天然节流）。
+`MessageRows.kt` 中 `Row(Modifier.height(IntrinsicSize.Min))` + `Box(fillMaxHeight)` 让每一行都触发 intrinsic 测量（两次测量 pass），高流量 LazyColumn 滚动下是真实的组合开销。改用固定宽度 4dp 的 Box + `align(Alignment.Top)`（或直接去掉 fillMaxHeight），测量成本降到 O(1)。
 
-5. **文档与代码安全边界不一致** ✅
-   `docs/architecture.md` 声明"解压后最多 4 MiB、单帧最多 1000 个子包"，代码实际为 32 MiB（`BiliPacketCodec.Limits.maxDecompressedBytes`）与 20,000 子包。
-   处理：保留代码的 32 MiB / 20,000（`oversized-decompressed.b64` fixture 精确构造为 16 MiB，说明 32 MiB 是原作者的主动选择；收紧会整帧丢弃大房间消息），同步修正文档为 32 MiB / 20,000。
+### P1-3 状态流写入节流：每包一次 FrameReceived
 
-6. **置顶倒计时冻结** ✅
-   `RoomUiState.nowMillis` 只在消息/偏好事件到达时刷新，安静直播间"剩余 Xs"倒计时会停住。
-   修复：`PinnedCountdownLabel` 组件内建 1 秒 ticker，独立于消息流刷新；剩余秒数改为向上取整。
+`BiliLiveGateway.collectFrames` 对每个 packet 发 `GatewayEvent.FrameReceived`，`SessionController` 每次写 `MutableStateFlow`，高流量房间每秒几十上百次状态更新，下游 UI、通知、`addRecentRoom` 逻辑都被唤醒。方案：
+- `FrameReceived` 合并为按 WebSocket 帧上报（一次帧一个事件），或对 `lastFrameAtMillis`/`popularity` 更新做 ≥200ms 节流（节流计数仍保留语义：idle 检测用最后一次真实帧时间即可）。
+- 通知侧已由 P0-4 节流兜底，此优化主要省掉状态流写放大与 Compose 重组。
 
-7. **没有版本控制与 CI** ✅
-   工作区无 `.git`。
-   修复：`git init`（初始提交 `31ea2c6`）；新增 `.github/workflows/ci.yml`（JDK 21 + Android SDK 34，CI 内生成临时签名 keystore，跑完整 `verifyAll` 并上传 APK 产物）；`.gitignore` 补全环境目录。
+### P1-4 WBI keys TTL 缓存
 
-## P1 性能与流畅度
+`BiliRoomApi.getDanmuInfo` 每次（含每次重连）都先 `fetchWbiKeys()`，多一次 HTTP 往返并放大 429 风险。B站 keys 按天轮换，缓存 30 分钟足够。加一个 `kotlinx.coroutines` 无关的简单 TTL 缓存（时间戳 + 原子写），失败时不缓存（保持现有回退语义）。
 
-8. **消息热路径重复对象映射**
-   存在两套并行消息模型：`core:model` 的 `LiveMessage` 与 app 层的 `AnchorMessage`，并在 `AnchorSessionRepository.kt` 与 `RoomViewModel.kt` 各写了一份双向转换。每条消息都要做多态转换，且 `MessagePipeline.snapshot()` 每次全量重建可见列表，`applyPipelineState` 对每条消息全量 `map`（500 条容量 = 每次事件 500 次转换+分配）。50 msg/s 时约 2.5 万次转换/秒，是 UI 抖动的主要来源。
-   建议：UI 直接消费 core 模型（纯数据类，无 Android 依赖），删除 `AnchorModels.kt` 重复层级与双向转换；展示文案用扩展函数。
+### P1-5 OkHttpClient 实例合并
 
-9. **每个数据包都触发状态流写入**
-   `BiliLiveGateway.collectFrames` 对每个 packet 发 `GatewayEvent.FrameReceived`，`SessionController` 每次写 `MutableStateFlow`（高流量房间每秒几十上百次），下游 UI 与通知同步被唤醒。
-   建议：合并为"按 WebSocket 帧"粒度上报，或对 UI 可见的状态（人气、lastFrameAt）做节流（如 ≥200ms 才发一次）。
+`AppContainer` 建一份 client，`BiliRoomApi` 与 `BiliLiveGateway` 又各 `newBuilder()` 出一份（三个连接池/线程池）。改为 AppContainer 统一构造并注入；`BiliLiveGateway` 的 WS 超时（readTimeout=0、callTimeout=10s）需真机确认 callTimeout 不会在静默期误杀 WS（应用层已有 idle 检测，可考虑只留 connectTimeout）。
 
-10. **WBI keys 每次重连都重新抓取**
-    `BiliRoomApi.getDanmuInfo` 每次都先 `fetchWbiKeys()`（多一次 HTTP 往返），重连退避序列会放大请求量，也更容易触发 429。
-    建议：带 TTL（如 30 分钟）缓存 img_key/sub_key。
+### P1-6 清理 P0 遗留的死字段（新发现）
 
-11. **OkHttpClient 三份实例**
-    `AppContainer` 建一个 client，`BiliRoomApi` 与 `BiliLiveGateway` 又各 `newBuilder()` 出一份（独立连接池与调度线程池）。
-    建议：统一在 AppContainer 构造一份带各自超时配置的实例，共享连接池。另需真机确认：网关 client 的 `callTimeout(10s)` 对 WebSocket 长连接是否会在静默期误杀（应用层已有 idle 检测与心跳，可考虑去掉 WS 的 callTimeout 只保留 connectTimeout）。
+`RoomUiState.nowMillis` 在 `PinnedCountdownLabel` 自维护 ticker 后已无 UI 读者，仅 `applyPipelineState` 还在赋值。删除该字段与其赋值，减少每次消息事件的拷贝面。
+
+### P1-7 Money 字符串往返清理（新发现）
+
+`RoomViewModel.toCoreMessage` 中 `Money.fromCny(priceCny.toString())`、`Money.fromCny(it.toString())` 走字符串转换，分配且可能引入精度噪音。给 `Money` 增加 `fromMilliYuan`/`fromYuanDouble`（内部按毫单位换算，不经过字符串），UI 侧反向用 `milliYuan` 算术。`describeMessage` 的 `"%.2f".format` 可保留（非热路径）。
+
+### P1-8 重要消息判定逻辑去重（新发现）
+
+`AnchorSessionRepository.isImportant`（驱动提醒）与 `MessagePipeline`/`MessageFilter.filter.important`（驱动置顶）是两套平行判定，容易漂移（如未来给 SC 加金额阈值会只改一处）。把判定收敛到 `core:domain` 单一函数（如 `FilterDecision.important` 或 `LiveMessage.isImportant(preferences)`），Repository 与 Pipeline 共用。
 
 ## P2 构建与工具链
 
-12. **工具链版本偏旧**
-    Kotlin 1.9.24 + Compose 编译器 1.5.14（`composeOptions.kotlinCompilerExtensionVersion` 已属废弃路径）、AGP 8.5.2、compileSdk/targetSdk 34、Compose BOM 2024.06.00。
-    建议：Kotlin 2.x + `org.jetbrains.kotlin.plugin.compose`、AGP 8.7+、compileSdk/targetSdk 35（商店新版本要求）、Compose BOM 更新；`kotlinOptions` 迁移到 `compilerOptions`。升级后需跑完整 verifyAll 回归。
+### P2-1 工具链升级（一次性、需完整 verifyAll 回归）
 
-13. **签名配置阻断本地构建**
-    `app/build.gradle.kts` 在配置期强制要求 `keystore.properties` 存在，否则整个工程（含 debug 构建）无法配置。新克隆环境没有该文件会直接失败。
-    建议：签名改为可选——文件存在则用 release 签名，否则 release 构建使用 debug 签名并在产物名标注 unsigned；真实发布签名由 CI secret 注入。
+- Kotlin 1.9.24 → 2.1.x，Compose 编译器随 Kotlin（`org.jetbrains.kotlin.plugin.compose`），删除 `composeOptions.kotlinCompilerExtensionVersion`。
+- AGP 8.5.2 → 8.7+（配合 Gradle 8.11+）；`compileSdk`/`targetSdk` 34 → 35（商店对新版本要求）；Compose BOM 2024.06 → 2025.x。
+- `kotlinOptions` 迁移到 `compilerOptions` DSL。
+- 风险：Compose API 兼容性、AGP 行为变化；验证靠现有 verifyAll 门 + 真机清单。
 
-14. **可尝试开启 configuration cache**
-    `gradle.properties` 已开 parallel/caching。自定义 verifyAll 门禁任务（fixture/permission/hygiene）在 doLast 里直接读写文件，需先声明 inputs/outputs 或改造成任务，才能安全开启 configuration cache 以加速本地与 CI 构建。
+### P2-2 签名配置可选化
 
-15. **Debug APK 偏大（17.4 MB）**
-    主要来自 `compose-material-icons-extended`。release 已 R8 裁剪到 1.5 MB，若在意 debug 安装体验可换 `material-icons-core` + 自绘矢量图标。
+`app/build.gradle.kts` 配置期强制要求 `keystore.properties` 存在，否则整个工程（含 debug）无法配置。改为：文件存在 → release 用正式签名；缺失 → 用 debug 签名并命名 `app-release-unsigned.apk`（与现状产物名一致）。CI 保留生成临时 keystore 的步骤（也可删除，若本地可构建则 CI 同样可）。
 
-16. **无 Baseline Profile**
-    高流量 LazyColumn 滚动是本应用的核心交互，建议新增 Macrobenchmark + Baseline Profile 模块，显著改善启动与滚动掉帧。
+### P2-3 Configuration Cache
+
+自定义 verifyAll 门禁任务（`protocolFixtureCheck`、`permissionAllowlistCheck`、`releaseHygieneCheck`、`apkSizeCheck`、`perfSmoke`）在 doLast 里直接读写文件，需先声明 inputs/outputs（或改用 `@TaskAction` + `@InputFiles`/`@OutputFile`），再开启 `org.gradle.configuration-cache=true`。收益：本地与 CI 配置阶段从秒级降到毫秒级。
+
+### P2-4 Baseline Profile + Macrobenchmark
+
+滚动密集型应用的核心体验在 LazyColumn 高流量场景。新增 `:macrobenchmark` 与 `:baselineprofile` 模块（或仅手写 profile 规则），生成 Baseline Profile 打进 release。配合现有 12k 事件烟测，可量化滚动掉帧改进。
+
+### P2-5 Debug APK 瘦身
+
+17.4MB 主要来自 `compose-material-icons-extended`。换 `material-icons-core`（当前用到的图标：ArrowBack、CleaningServices、Pause、PlayArrow、Refresh、Settings、South 都在 core 或可自绘），Debug 体积可降 8-10MB，release 不受影响（R8 已裁剪）。
 
 ## P3 产品与体验
 
-17. **进程被杀后不恢复**：`START_NOT_STICKY` 且房间号不持久化。可选：持久化最近房间 + 通知栏"恢复连接"；注意 Android 14+ FGS dataSync 后台启动限制。
-18. **点击弹幕拉黑用户**：目前拉黑只能进设置页，弹幕列表直接点击拉黑更自然。
-19. **长按复制弹幕/SC 文本**。
-20. **B 站 App 深链**：`bilibili://live/<id>` intent filter，从 B 站直接跳入房间。
-21. **横屏/第二屏体验**：沉浸模式、可选的强制横屏设置项。
-22. **重连后提示"可能遗漏消息"**：`mayHaveMissedMessages` 已建模但 UI 未展示。
-23. **通知小图标**：当前用 adaptive icon mipmap 作 smallIcon，建议补一个专用单色 vector 通知图标。
-24. **通知权限被拒的引导**：Android 13+ 拒绝 POST_NOTIFICATIONS 后 FGS 通知不可见，连接状态只能靠 App 内查看，可加一次性的解释引导。
+### P3-1 重要提醒改用专用通知渠道（新发现）
 
-## 建议执行顺序
+现状：`AndroidReminderSink` 用 `RingtoneManager` 直接 `play()` 默认通知音 + 手动震动。问题：不受系统通知音量/免打扰策略管理，用户无法按渠道关闭声音，OEM 上行为不一致。方案：新增 `IMPORTANCE_HIGH` 渠道（如 "anchor_important"），提醒时 `notify()` 一条临时通知（自动消失或带文案），系统负责声音/震动策略；直接 play 作为渠道不可用时的兜底。P0-4 的通知节流同样适用于提醒通知。
 
-1. P0 第 1~6 项（正确性与资源边界，改动小、有现成测试框架可回归）
-2. P1 第 8~11 项（热路径性能，重点是删除双模型映射 + 通知节流）
-3. P2 工具链升级与 CI 接入（需完整 verifyAll 回归）
-4. P3 按产品优先级挑选
+### P3-2 进程被杀后恢复
 
-每项完成后补充对应单元测试并跑 `verifyAll` 全门回归。
+`START_NOT_STICKY` + 状态不持久化：进程被杀后连接消失，用户要手动重进。方案：持久化最近房间号（DataStore 已有 recentRooms），启动页提示"恢复上次连接"；或 `START_REDELIVER_INTENT`（注意 Android 14+ FGS dataSync 后台启动限制，需验证系统重启场景）。
+
+### P3-3 消息交互增强
+
+- 点击弹幕行 → 拉黑该用户（当前只能进设置页操作）。
+- 长按 → 复制文本（弹幕/SC/礼物）。
+- 重连后 `mayHaveMissedMessages=true` 时顶部提示"连接中断，可能遗漏消息"（字段已建模，UI 未用）。
+
+### P3-4 深链与第二屏体验
+
+- intent filter `bilibili://live/<id>`，从 B站 App 直接跳入。
+- 沉浸模式 + 设置项"强制横屏"（第二屏/平板场景）。
+- 通知 smallIcon 换专用单色 vector（当前用 adaptive icon mipmap，部分系统渲染成空白方块）。
+
+### P3-5 权限引导
+
+Android 13+ 拒绝 POST_NOTIFICATIONS 后 FGS 通知不可见、提醒不可用。连接页加一次性解释（"用于显示连接状态与重要消息提醒"），拒绝后可再次引导到设置。
+
+## 执行顺序建议
+
+1. P1-1（双模型删除）+ P1-2 + P1-6 + P1-7 + P1-8：同属消息链路重构，一次性做完并跑 verifyAll。
+2. P1-3 + P1-4 + P1-5：网络/状态节流。
+3. P2-1 工具链升级（改完必须全量回归）。
+4. P2-2/P2-3 构建体验。
+5. P3 按产品优先级挑选；P3-1 提醒渠道建议随 P1 批次做（与通知节流同域）。
+
+## 验证与环境
+
+- 每批改动后跑 `verifyAll`（本机环境配方见 `docs/implementation-log.md` 阶段 14：ASCII junction + GRADLE_USER_HOME/LOCALAPPDATA 重定向 + Robolectric 完整权限）。
+- 真机项保持人工门：WS callTimeout、OEM 后台、提醒渠道声音策略、深链跳转。

@@ -79,11 +79,12 @@ class BiliRoomApi(
     private val baseHttpUrl: HttpUrl = "https://api.live.bilibili.com/".toHttpUrl(),
     private val wbiNavUrl: HttpUrl = "https://api.bilibili.com/x/web-interface/nav".toHttpUrl(),
 ) {
-    private val client = client.newBuilder()
-        .connectTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-        .readTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-        .callTimeout(10, java.util.concurrent.TimeUnit.SECONDS)
-        .build()
+    private val client = client
+
+    // WBI keys 按天轮换；缓存 30 分钟即可避免每次重连都多一次 nav 请求，
+    // 失败时不写入缓存，保持现有回退语义。
+    @Volatile
+    private var wbiCache: Pair<Pair<String, String>, Long>? = null
 
     suspend fun resolveRoom(inputRoomId: Long): ResolvedRoom {
         val url = baseHttpUrl.newBuilder()
@@ -196,6 +197,12 @@ class BiliRoomApi(
     }
 
     private suspend fun fetchWbiKeys(): Pair<String, String> {
+        val now = System.currentTimeMillis()
+        wbiCache?.let { (keys, fetchedAtMillis) ->
+            if (now - fetchedAtMillis < WBI_CACHE_TTL_MILLIS) {
+                return keys
+            }
+        }
         val response = execute(httpRequest(wbiNavUrl))
         val body = response.useBodyString()
         if (!response.isSuccessful) {
@@ -211,7 +218,9 @@ class BiliRoomApi(
         if (imgKey.isNullOrBlank() || subKey.isNullOrBlank()) {
             throw UnknownRecoverableFailure("Missing wbi keys")
         }
-        return imgKey to subKey
+        val keys = imgKey to subKey
+        wbiCache = keys to now
+        return keys
     }
 
     private fun toDanmuHosts(hostDtos: List<BiliHostDto>): List<DanmuHost> {
@@ -284,5 +293,6 @@ class BiliRoomApi(
     companion object {
         const val DEFAULT_USER_AGENT =
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
+        private const val WBI_CACHE_TTL_MILLIS: Long = 30 * 60 * 1000L
     }
 }

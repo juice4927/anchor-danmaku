@@ -1,5 +1,9 @@
 package cn.danmaku.anchor.data
 
+import cn.danmaku.anchor.model.BlockedUser as CoreBlockedUser
+import cn.danmaku.anchor.model.Money
+import cn.danmaku.anchor.model.UserPreferences
+
 data class BlockedUser(
     val uid: Long,
     val userName: String,
@@ -26,3 +30,16 @@ data class AnchorUserPreferences(
         val HIGHLIGHT_GIFT_OPTIONS = listOf(50, 100, 500)
     }
 }
+
+/** app 层偏好 → 领域层偏好（管线/过滤/提醒共用同一份语义）。 */
+fun AnchorUserPreferences.toCorePreferences(): UserPreferences = UserPreferences(
+    danmakuTextSizeSp = fontSizeSp,
+    maxMessageCount = maxMessages,
+    keepScreenOn = keepScreenOn,
+    soundEnabled = soundEnabled,
+    vibrationEnabled = vibrationEnabled,
+    minimumGiftDisplay = Money.fromWholeCny(minGiftDisplayThresholdYuan.toLong()),
+    highlightGiftThreshold = Money.fromWholeCny(highlightGiftThresholdYuan.toLong()),
+    keywordBlacklist = keywordBlacklist.toSet(),
+    blockedUsers = blockedUsers.map { CoreBlockedUser(uid = it.uid, latestName = it.userName) },
+)

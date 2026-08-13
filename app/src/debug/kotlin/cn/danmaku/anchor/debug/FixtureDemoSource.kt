@@ -2,10 +2,8 @@ package cn.danmaku.anchor.debug
 
 import cn.danmaku.anchor.AnchorConnectionState
 import cn.danmaku.anchor.ConnectionPhase
-import cn.danmaku.anchor.DanmakuMessage
-import cn.danmaku.anchor.GiftMessage
-import cn.danmaku.anchor.GuardMessage
-import cn.danmaku.anchor.SuperChatMessage
+import cn.danmaku.anchor.model.LiveMessage
+import cn.danmaku.anchor.model.Money
 
 class FixtureDemoSource : DemoSource {
     override val isAvailable: Boolean = true
@@ -49,7 +47,7 @@ class FixtureDemoSource : DemoSource {
             ),
             DemoScriptEvent.Delay(700L),
             DemoScriptEvent.Message(
-                DanmakuMessage(
+                LiveMessage.DanmakuMessage(
                     id = "demo-danmaku-1",
                     roomId = roomId,
                     uid = 10001L,
@@ -63,7 +61,7 @@ class FixtureDemoSource : DemoSource {
             ),
             DemoScriptEvent.Delay(850L),
             DemoScriptEvent.Message(
-                SuperChatMessage(
+                LiveMessage.SuperChatMessage(
                     id = "demo-sc-1",
                     roomId = roomId,
                     uid = 10002L,
@@ -71,14 +69,14 @@ class FixtureDemoSource : DemoSource {
                     serverTimestampMillis = now + 850L,
                     receivedAtMillis = now + 850L,
                     message = "这条醒目留言会被置顶和提醒",
-                    priceCny = 30.0,
+                    priceCny = Money.fromWholeCny(30),
                     startTimeMillis = now,
                     endTimeMillis = now + 60000L,
                 ),
             ),
             DemoScriptEvent.Delay(850L),
             DemoScriptEvent.Message(
-                GiftMessage(
+                LiveMessage.GiftMessage(
                     id = "demo-gift-1",
                     roomId = roomId,
                     uid = 10003L,
@@ -89,12 +87,12 @@ class FixtureDemoSource : DemoSource {
                     count = 3,
                     totalCoin = 100000L,
                     coinType = "gold",
-                    estimatedCny = 100.0,
+                    estimatedCny = Money.fromWholeCny(100),
                 ),
             ),
             DemoScriptEvent.Delay(900L),
             DemoScriptEvent.Message(
-                GuardMessage(
+                LiveMessage.GuardMessage(
                     id = "demo-guard-1",
                     roomId = roomId,
                     uid = 10004L,
@@ -130,7 +128,7 @@ class FixtureDemoSource : DemoSource {
             ),
             DemoScriptEvent.Delay(600L),
             DemoScriptEvent.Message(
-                DanmakuMessage(
+                LiveMessage.DanmakuMessage(
                     id = "demo-danmaku-2",
                     roomId = roomId,
                     uid = 10001L,
@@ -138,6 +136,8 @@ class FixtureDemoSource : DemoSource {
                     serverTimestampMillis = now + 5200L,
                     receivedAtMillis = now + 5200L,
                     text = "重连成功，期间消息可能遗漏",
+                    medalName = null,
+                    medalLevel = null,
                     repeatCount = 1,
                 ),
             ),

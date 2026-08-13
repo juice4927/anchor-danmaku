@@ -1,5 +1,7 @@
 package cn.danmaku.anchor
 
+import cn.danmaku.anchor.model.LiveMessage
+
 enum class ConnectionPhase {
     Idle,
     Resolving,
@@ -53,64 +55,5 @@ data class AnchorConnectionState(
         }
 }
 
-sealed interface AnchorMessage {
-    val id: String
-    val roomId: Long
-    val uid: Long?
-    val userName: String?
-    val serverTimestampMillis: Long?
-    val receivedAtMillis: Long
-}
-
-data class DanmakuMessage(
-    override val id: String,
-    override val roomId: Long,
-    override val uid: Long?,
-    override val userName: String?,
-    override val serverTimestampMillis: Long?,
-    override val receivedAtMillis: Long,
-    val text: String,
-    val medalName: String? = null,
-    val medalLevel: Int? = null,
-    val repeatCount: Int = 1,
-) : AnchorMessage
-
-data class SuperChatMessage(
-    override val id: String,
-    override val roomId: Long,
-    override val uid: Long?,
-    override val userName: String?,
-    override val serverTimestampMillis: Long?,
-    override val receivedAtMillis: Long,
-    val message: String,
-    val priceCny: Double,
-    val startTimeMillis: Long? = null,
-    val endTimeMillis: Long? = null,
-) : AnchorMessage
-
-data class GiftMessage(
-    override val id: String,
-    override val roomId: Long,
-    override val uid: Long?,
-    override val userName: String?,
-    override val serverTimestampMillis: Long?,
-    override val receivedAtMillis: Long,
-    val giftName: String,
-    val count: Int,
-    val totalCoin: Long,
-    val coinType: String,
-    val estimatedCny: Double? = null,
-) : AnchorMessage
-
-data class GuardMessage(
-    override val id: String,
-    override val roomId: Long,
-    override val uid: Long?,
-    override val userName: String?,
-    override val serverTimestampMillis: Long?,
-    override val receivedAtMillis: Long,
-    val guardLevel: Int,
-    val count: Int,
-) : AnchorMessage
-
-fun AnchorMessage.displayName(): String = userName?.takeIf { it.isNotBlank() } ?: "匿名用户"
+/** 消息展示名（UI 与提醒共用）。 */
+fun LiveMessage.displayName(): String = userName?.takeIf { it.isNotBlank() } ?: "匿名用户"

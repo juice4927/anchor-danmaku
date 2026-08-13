@@ -2,8 +2,9 @@ package cn.danmaku.anchor
 
 import cn.danmaku.anchor.domain.session.SessionController
 import cn.danmaku.anchor.domain.session.SessionState
-import cn.danmaku.anchor.model.ConnectionFailure as CoreConnectionFailure
-import cn.danmaku.anchor.model.LiveMessage as CoreLiveMessage
+import cn.danmaku.anchor.domain.message.isImportant
+import cn.danmaku.anchor.model.ConnectionFailure
+import cn.danmaku.anchor.model.LiveMessage
 import cn.danmaku.anchor.model.LiveStatus
 import cn.danmaku.anchor.model.Money
 import cn.danmaku.anchor.data.AnchorUserPreferences
@@ -39,14 +40,14 @@ class AnchorSessionRepository(
 ) : SessionCoordinator {
     private val guard = Mutex()
     private val stateFlow = MutableStateFlow(AnchorConnectionState())
-    private val messageFlow = MutableSharedFlow<AnchorMessage>(extraBufferCapacity = 1024)
+    private val messageFlow = MutableSharedFlow<LiveMessage>(extraBufferCapacity = 1024)
 
     private var activeBackend: SessionBackend? = null
     private var stateJob: Job? = null
     private var messageJob: Job? = null
 
     override val state: StateFlow<AnchorConnectionState> = stateFlow.asStateFlow()
-    override val messages: Flow<AnchorMessage> = messageFlow.asSharedFlow()
+    override val messages: Flow<LiveMessage> = messageFlow.asSharedFlow()
     override val demoAvailable: Boolean
         get() = demoSource.isAvailable
     override val demoEntryLabel: String?
@@ -113,19 +114,14 @@ class AnchorSessionRepository(
     }
 
     private fun isImportant(
-        message: AnchorMessage,
+        message: LiveMessage,
         preferences: AnchorUserPreferences,
-    ): Boolean = when (message) {
-        is SuperChatMessage -> true
-        is GuardMessage -> true
-        is GiftMessage -> (message.estimatedCny ?: Double.NEGATIVE_INFINITY) >= preferences.highlightGiftThresholdYuan
-        is DanmakuMessage -> false
-    }
+    ): Boolean = message.isImportant(Money.fromWholeCny(preferences.highlightGiftThresholdYuan.toLong()))
 }
 
 interface SessionCoordinator {
     val state: StateFlow<AnchorConnectionState>
-    val messages: Flow<AnchorMessage>
+    val messages: Flow<LiveMessage>
     val demoAvailable: Boolean
     val demoEntryLabel: String?
 
@@ -136,7 +132,7 @@ interface SessionCoordinator {
 
 private interface SessionBackend {
     val state: StateFlow<AnchorConnectionState>
-    val messages: Flow<AnchorMessage>
+    val messages: Flow<LiveMessage>
 
     suspend fun start(roomId: Long)
     suspend fun retryNow()
@@ -155,11 +151,11 @@ private class DemoSessionBackend(
             inputRoomId = roomId,
         ),
     )
-    private val messageFlow = MutableSharedFlow<AnchorMessage>(extraBufferCapacity = 64)
+    private val messageFlow = MutableSharedFlow<LiveMessage>(extraBufferCapacity = 64)
     private var job: Job? = null
 
     override val state: StateFlow<AnchorConnectionState> = stateFlow.asStateFlow()
-    override val messages: Flow<AnchorMessage> = messageFlow.asSharedFlow()
+    override val messages: Flow<LiveMessage> = messageFlow.asSharedFlow()
 
     override suspend fun start(roomId: Long) {
         job?.cancel()
@@ -194,12 +190,12 @@ private class CoreSessionBackend(
     private val dispatcher: CoroutineDispatcher,
 ) : SessionBackend {
     private val stateFlow = MutableStateFlow(controller.state.value.toAnchorState())
-    private val messageFlow = MutableSharedFlow<AnchorMessage>(extraBufferCapacity = 1024)
+    private val messageFlow = MutableSharedFlow<LiveMessage>(extraBufferCapacity = 1024)
     private var stateJob: Job? = null
     private var messageJob: Job? = null
 
     override val state: StateFlow<AnchorConnectionState> = stateFlow.asStateFlow()
-    override val messages: Flow<AnchorMessage> = messageFlow.asSharedFlow()
+    override val messages: Flow<LiveMessage> = messageFlow.asSharedFlow()
 
     override suspend fun start(roomId: Long) {
         stateJob?.cancel()
@@ -208,7 +204,7 @@ private class CoreSessionBackend(
             controller.state.collect { stateFlow.value = it.toAnchorState() }
         }
         messageJob = scope.launch(dispatcher) {
-            controller.events.collect { messageFlow.emit(it.toAnchorMessage()) }
+            controller.events.collect { messageFlow.emit(it) }
         }
         controller.start(roomId)
     }
@@ -285,78 +281,26 @@ private fun LiveStatus.toDisplayLabel(): String = when (this) {
     LiveStatus.UNKNOWN -> "状态未知"
 }
 
-private fun CoreConnectionFailure.toAnchorFailureKind(): AnchorFailureKind = when (this) {
-    CoreConnectionFailure.InvalidRoomInput -> AnchorFailureKind.InvalidRoomInput
-    CoreConnectionFailure.RoomNotFound -> AnchorFailureKind.RoomNotFound
-    CoreConnectionFailure.RoomRestricted -> AnchorFailureKind.RoomRestricted
-    CoreConnectionFailure.NetworkUnavailable -> AnchorFailureKind.NetworkUnavailable
-    is CoreConnectionFailure.RateLimited -> AnchorFailureKind.RateLimited
-    is CoreConnectionFailure.EndpointUnavailable -> AnchorFailureKind.EndpointUnavailable
-    is CoreConnectionFailure.HostRejected -> AnchorFailureKind.HostRejected
-    is CoreConnectionFailure.AuthRejected -> AnchorFailureKind.AuthRejected
-    CoreConnectionFailure.ConnectionLost -> AnchorFailureKind.ConnectionLost
-    is CoreConnectionFailure.ProtocolUnsupported -> AnchorFailureKind.ProtocolUnsupported
-    is CoreConnectionFailure.UnknownRecoverable -> AnchorFailureKind.UnknownRecoverable
+private fun ConnectionFailure.toAnchorFailureKind(): AnchorFailureKind = when (this) {
+    ConnectionFailure.InvalidRoomInput -> AnchorFailureKind.InvalidRoomInput
+    ConnectionFailure.RoomNotFound -> AnchorFailureKind.RoomNotFound
+    ConnectionFailure.RoomRestricted -> AnchorFailureKind.RoomRestricted
+    ConnectionFailure.NetworkUnavailable -> AnchorFailureKind.NetworkUnavailable
+    is ConnectionFailure.RateLimited -> AnchorFailureKind.RateLimited
+    is ConnectionFailure.EndpointUnavailable -> AnchorFailureKind.EndpointUnavailable
+    is ConnectionFailure.HostRejected -> AnchorFailureKind.HostRejected
+    is ConnectionFailure.AuthRejected -> AnchorFailureKind.AuthRejected
+    ConnectionFailure.ConnectionLost -> AnchorFailureKind.ConnectionLost
+    is ConnectionFailure.ProtocolUnsupported -> AnchorFailureKind.ProtocolUnsupported
+    is ConnectionFailure.UnknownRecoverable -> AnchorFailureKind.UnknownRecoverable
 }
 
-private fun CoreConnectionFailure.detailText(): String? = when (this) {
-    is CoreConnectionFailure.RateLimited -> statusCode?.let { "HTTP $it" }
-    is CoreConnectionFailure.EndpointUnavailable -> reason
-    is CoreConnectionFailure.HostRejected -> reason
-    is CoreConnectionFailure.AuthRejected -> reason
-    is CoreConnectionFailure.ProtocolUnsupported -> protocolVersion?.let { "protocolVersion=$it" }
-    is CoreConnectionFailure.UnknownRecoverable -> reason
+private fun ConnectionFailure.detailText(): String? = when (this) {
+    is ConnectionFailure.RateLimited -> statusCode?.let { "HTTP $it" }
+    is ConnectionFailure.EndpointUnavailable -> reason
+    is ConnectionFailure.HostRejected -> reason
+    is ConnectionFailure.AuthRejected -> reason
+    is ConnectionFailure.ProtocolUnsupported -> protocolVersion?.let { "protocolVersion=$it" }
+    is ConnectionFailure.UnknownRecoverable -> reason
     else -> null
 }
-
-private fun CoreLiveMessage.toAnchorMessage(): AnchorMessage = when (this) {
-    is CoreLiveMessage.DanmakuMessage -> DanmakuMessage(
-        id = id,
-        roomId = roomId,
-        uid = uid,
-        userName = userName,
-        serverTimestampMillis = serverTimestampMillis,
-        receivedAtMillis = receivedAtMillis,
-        text = text,
-        medalName = medalName,
-        medalLevel = medalLevel,
-        repeatCount = repeatCount,
-    )
-    is CoreLiveMessage.SuperChatMessage -> SuperChatMessage(
-        id = id,
-        roomId = roomId,
-        uid = uid,
-        userName = userName,
-        serverTimestampMillis = serverTimestampMillis,
-        receivedAtMillis = receivedAtMillis,
-        message = message,
-        priceCny = priceCny.toDoubleYuan(),
-        startTimeMillis = startTimeMillis,
-        endTimeMillis = endTimeMillis,
-    )
-    is CoreLiveMessage.GiftMessage -> GiftMessage(
-        id = id,
-        roomId = roomId,
-        uid = uid,
-        userName = userName,
-        serverTimestampMillis = serverTimestampMillis,
-        receivedAtMillis = receivedAtMillis,
-        giftName = giftName,
-        count = count,
-        totalCoin = totalCoin,
-        coinType = coinType,
-        estimatedCny = estimatedCny?.toDoubleYuan(),
-    )
-    is CoreLiveMessage.GuardMessage -> GuardMessage(
-        id = id,
-        roomId = roomId,
-        uid = uid,
-        userName = userName,
-        serverTimestampMillis = serverTimestampMillis,
-        receivedAtMillis = receivedAtMillis,
-        guardLevel = guardLevel,
-        count = count,
-    )
-}
-
-private fun Money.toDoubleYuan(): Double = milliYuan / 1_000.0

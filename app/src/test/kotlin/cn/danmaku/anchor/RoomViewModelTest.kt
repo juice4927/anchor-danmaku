@@ -1,6 +1,8 @@
 package cn.danmaku.anchor
 
 import cn.danmaku.anchor.data.AnchorUserPreferences
+import cn.danmaku.anchor.model.LiveMessage
+import cn.danmaku.anchor.model.Money
 import cn.danmaku.anchor.testutil.FakePreferencesStore
 import cn.danmaku.anchor.testutil.FakeSessionCoordinator
 import cn.danmaku.anchor.testutil.MainDispatcherRule
@@ -8,11 +10,13 @@ import cn.danmaku.anchor.ui.room.RoomViewModel
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class RoomViewModelTest {
     @get:Rule
     val mainDispatcherRule = MainDispatcherRule()
@@ -27,7 +31,7 @@ class RoomViewModelTest {
 
         viewModel.togglePause()
         session.emitMessage(
-            DanmakuMessage(
+            LiveMessage.DanmakuMessage(
                 id = "d1",
                 roomId = 987654L,
                 uid = 10001L,
@@ -35,6 +39,8 @@ class RoomViewModelTest {
                 serverTimestampMillis = 1L,
                 receivedAtMillis = 1L,
                 text = "hello",
+                medalName = null,
+                medalLevel = null,
             ),
         )
         advanceUntilIdle()
@@ -55,7 +61,7 @@ class RoomViewModelTest {
 
         viewModel.togglePause()
         session.emitMessage(
-            SuperChatMessage(
+            LiveMessage.SuperChatMessage(
                 id = "sc1",
                 roomId = 987654L,
                 uid = 20002L,
@@ -63,7 +69,9 @@ class RoomViewModelTest {
                 serverTimestampMillis = 2L,
                 receivedAtMillis = 2L,
                 message = "加油",
-                priceCny = 30.0,
+                priceCny = Money.fromWholeCny(30),
+                startTimeMillis = 2L,
+                endTimeMillis = 60_002L,
             ),
         )
         advanceUntilIdle()
@@ -82,7 +90,7 @@ class RoomViewModelTest {
         val viewModel = RoomViewModel(session, FakePreferencesStore(), mainDispatcherRule.dispatcher)
         advanceUntilIdle()
         session.emitMessage(
-            DanmakuMessage(
+            LiveMessage.DanmakuMessage(
                 id = "d1",
                 roomId = 987654L,
                 uid = 10001L,
@@ -90,6 +98,8 @@ class RoomViewModelTest {
                 serverTimestampMillis = 1L,
                 receivedAtMillis = 1L,
                 text = "hello",
+                medalName = null,
+                medalLevel = null,
             ),
         )
         advanceUntilIdle()
@@ -116,7 +126,7 @@ class RoomViewModelTest {
 
         viewModel.onAutoFollowDisabled()
         session.emitMessage(
-            DanmakuMessage(
+            LiveMessage.DanmakuMessage(
                 id = "d1",
                 roomId = 987654L,
                 uid = 10001L,
@@ -124,6 +134,8 @@ class RoomViewModelTest {
                 serverTimestampMillis = 1L,
                 receivedAtMillis = 1L,
                 text = "hello",
+                medalName = null,
+                medalLevel = null,
             ),
         )
         advanceUntilIdle()

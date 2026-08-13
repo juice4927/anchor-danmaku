@@ -54,6 +54,8 @@ class SessionController(
     private var sessionLoopJob: Job? = null
     private var activeSession: GatewaySession? = null
     private var activeInputRoomId: Long? = null
+    private var lastStateWriteMillis = 0L
+    private var stateWritePending = false
 
     val state: StateFlow<SessionState> = mutableState.asStateFlow()
     val events: Flow<LiveMessage> = mutableEvents.asSharedFlow()
@@ -197,10 +199,12 @@ class SessionController(
                             // op=3 心跳回复证明连接存活，必须刷新最近帧时间，否则 idle 检测
                             // 会在“无弹幕但有正常心跳”的低流量直播间误判断线。
                             lastFrameAtMillis = clock.nowMillis()
-                            updateConnectedLastFrame(lastFrameAtMillis, lastDiagnostics)
-                            val current = mutableState.value
-                            if (current is SessionState.Connected) {
-                                mutableState.value = current.copy(popularity = event.value)
+                            updateConnectedState { current ->
+                                current.copy(
+                                    lastFrameAtMillis = lastFrameAtMillis,
+                                    popularity = event.value,
+                                    diagnostics = lastDiagnostics,
+                                )
                             }
                             yield()
                         }
@@ -307,6 +311,7 @@ class SessionController(
                     idleWatchJob = scope.launch {
                         while (isActive) {
                             delay(1_000L)
+                            flushPendingStateWrite(lastFrameAtMillis, latestPopularity, lastDiagnostics)
                             val now = clock.nowMillis()
                             if (now - lastFrameAtMillis >= ReconnectPolicy.IDLE_TIMEOUT_MILLIS) {
                                 if (!disconnectSignal.isCompleted) {
@@ -383,6 +388,7 @@ class SessionController(
     private suspend fun stopLocked(nextState: SessionState?) {
         val loopJob = sessionLoopJob
         sessionLoopJob = null
+        stateWritePending = false
         activeSession?.close()
         activeSession = null
         loopJob?.cancelAndJoin()
@@ -391,10 +397,49 @@ class SessionController(
         }
     }
 
-    private fun updateConnectedLastFrame(lastFrameAtMillis: Long, diagnostics: GatewayDiagnostics) {
+    /**
+     * 高流量直播间每个数据包都会触发 Connected 状态写入；这里对 UI 可见的
+     * 状态更新做节流（本地帧时间变量仍每次刷新，idle 检测保持精确）。
+     * 节流期间置 pending，由 idle 看门狗的秒级 tick 兜底 flush，
+     * 保证突发流量结束后最终值一定收敛（如人气值）。
+     */
+    private fun updateConnectedState(transform: (SessionState.Connected) -> SessionState.Connected) {
+        val now = clock.nowMillis()
+        if (now - lastStateWriteMillis < STATE_WRITE_THROTTLE_MILLIS) {
+            stateWritePending = true
+            return
+        }
+        lastStateWriteMillis = now
+        stateWritePending = false
+        val current = mutableState.value
+        if (current is SessionState.Connected) {
+            mutableState.value = transform(current)
+        }
+    }
+
+    private fun flushPendingStateWrite(
+        lastFrameAtMillis: Long,
+        latestPopularity: Long?,
+        lastDiagnostics: GatewayDiagnostics,
+    ) {
+        if (!stateWritePending) return
+        val now = clock.nowMillis()
+        if (now - lastStateWriteMillis < STATE_WRITE_THROTTLE_MILLIS) return
+        stateWritePending = false
+        lastStateWriteMillis = now
         val current = mutableState.value
         if (current is SessionState.Connected) {
             mutableState.value = current.copy(
+                lastFrameAtMillis = lastFrameAtMillis,
+                popularity = latestPopularity ?: current.popularity,
+                diagnostics = lastDiagnostics,
+            )
+        }
+    }
+
+    private fun updateConnectedLastFrame(lastFrameAtMillis: Long, diagnostics: GatewayDiagnostics) {
+        updateConnectedState { current ->
+            current.copy(
                 lastFrameAtMillis = lastFrameAtMillis,
                 diagnostics = diagnostics,
             )
@@ -409,5 +454,9 @@ class SessionController(
         else -> ConnectionFailure.UnknownRecoverable(
             reason = error.message?.takeIf { it.isNotBlank() } ?: error::class.simpleName,
         )
+    }
+
+    private companion object {
+        const val STATE_WRITE_THROTTLE_MILLIS: Long = 200L
     }
 }

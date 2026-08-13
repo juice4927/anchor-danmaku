@@ -5,12 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,29 +21,25 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import cn.danmaku.anchor.AnchorMessage
-import cn.danmaku.anchor.DanmakuMessage
-import cn.danmaku.anchor.GiftMessage
-import cn.danmaku.anchor.GuardMessage
-import cn.danmaku.anchor.SuperChatMessage
 import cn.danmaku.anchor.displayName
+import cn.danmaku.anchor.model.LiveMessage
 
 @Composable
 fun MessageRow(
-    message: AnchorMessage,
+    message: LiveMessage,
     fontSizeSp: Int,
 ) {
     val accent = when (message) {
-        is SuperChatMessage -> Color(0xFFFFC857)
-        is GuardMessage -> Color(0xFFA78BFA)
-        is GiftMessage -> Color(0xFF4DD0E1)
-        is DanmakuMessage -> MaterialTheme.colorScheme.tertiary
+        is LiveMessage.SuperChatMessage -> Color(0xFFFFC857)
+        is LiveMessage.GuardMessage -> Color(0xFFA78BFA)
+        is LiveMessage.GiftMessage -> Color(0xFF4DD0E1)
+        is LiveMessage.DanmakuMessage -> MaterialTheme.colorScheme.tertiary
     }
     val label = when (message) {
-        is SuperChatMessage -> "SC"
-        is GuardMessage -> "舰队"
-        is GiftMessage -> "礼物"
-        is DanmakuMessage -> "弹幕"
+        is LiveMessage.SuperChatMessage -> "SC"
+        is LiveMessage.GuardMessage -> "舰队"
+        is LiveMessage.GiftMessage -> "礼物"
+        is LiveMessage.DanmakuMessage -> "弹幕"
     }
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -55,21 +47,19 @@ fun MessageRow(
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(IntrinsicSize.Min),
-        ) {
+        // 高流量滚动下避免 IntrinsicSize 的二次测量：Box 以内容（Column）定高，
+        // 色条用 matchParentSize 跟随，无需额外测量 pass。
+        Box(modifier = Modifier.fillMaxWidth()) {
             Box(
                 modifier = Modifier
+                    .matchParentSize()
                     .width(4.dp)
-                    .fillMaxHeight()
                     .background(accent),
             )
             Column(
                 modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                    .fillMaxWidth()
+                    .padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
             ) {
                 Row(
@@ -96,7 +86,7 @@ fun MessageRow(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (message is DanmakuMessage && message.medalName != null) {
+                    if (message is LiveMessage.DanmakuMessage && message.medalName != null) {
                         Text(
                             text = buildString {
                                 message.medalLevel?.let { append(it) }
@@ -122,12 +112,14 @@ fun MessageRow(
     }
 }
 
-private fun describeMessage(message: AnchorMessage): String = when (message) {
-    is DanmakuMessage -> message.text + if (message.repeatCount > 1) " ×${message.repeatCount}" else ""
-    is SuperChatMessage -> "¥${"%.2f".format(message.priceCny)} · ${message.message}"
-    is GiftMessage -> {
-        val amount = message.estimatedCny?.let { " · 约¥${"%.2f".format(it)}" }.orEmpty()
+fun LiveMessage.displayName(): String = userName?.takeIf { it.isNotBlank() } ?: "匿名用户"
+
+private fun describeMessage(message: LiveMessage): String = when (message) {
+    is LiveMessage.DanmakuMessage -> message.text + if (message.repeatCount > 1) " ×${message.repeatCount}" else ""
+    is LiveMessage.SuperChatMessage -> "¥${message.priceCny.toDisplayString()} · ${message.message}"
+    is LiveMessage.GiftMessage -> {
+        val amount = message.estimatedCny?.let { " · 约¥${it.toDisplayString()}" }.orEmpty()
         "${message.giftName} ×${message.count}$amount"
     }
-    is GuardMessage -> "等级 ${message.guardLevel} ×${message.count}"
+    is LiveMessage.GuardMessage -> "等级 ${message.guardLevel} ×${message.count}"
 }

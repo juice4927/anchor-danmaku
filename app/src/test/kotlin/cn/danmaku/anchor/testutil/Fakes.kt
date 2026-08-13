@@ -1,12 +1,12 @@
 package cn.danmaku.anchor.testutil
 
 import cn.danmaku.anchor.AnchorConnectionState
-import cn.danmaku.anchor.AnchorMessage
 import cn.danmaku.anchor.ConnectionPhase
 import cn.danmaku.anchor.SessionCoordinator
 import cn.danmaku.anchor.data.AnchorUserPreferences
 import cn.danmaku.anchor.data.BlockedUser
 import cn.danmaku.anchor.data.PreferencesStore
+import cn.danmaku.anchor.model.LiveMessage
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,7 +74,7 @@ class FakeSessionCoordinator(
     initialState: AnchorConnectionState = AnchorConnectionState(),
 ) : SessionCoordinator {
     private val stateFlow = MutableStateFlow(initialState)
-    private val messageFlow = MutableSharedFlow<AnchorMessage>()
+    private val messageFlow = MutableSharedFlow<LiveMessage>()
 
     var connectCalls: Int = 0
         private set
@@ -88,7 +88,7 @@ class FakeSessionCoordinator(
         private set
 
     override val state: StateFlow<AnchorConnectionState> = stateFlow.asStateFlow()
-    override val messages: Flow<AnchorMessage> = messageFlow.asSharedFlow()
+    override val messages: Flow<LiveMessage> = messageFlow.asSharedFlow()
     override val demoAvailable: Boolean = true
     override val demoEntryLabel: String? = "回放演示"
 
@@ -96,7 +96,7 @@ class FakeSessionCoordinator(
         stateFlow.emit(state)
     }
 
-    suspend fun emitMessage(message: AnchorMessage) {
+    suspend fun emitMessage(message: LiveMessage) {
         messageFlow.emit(message)
     }
 

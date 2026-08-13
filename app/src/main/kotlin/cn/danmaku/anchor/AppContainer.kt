@@ -16,6 +16,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import okhttp3.OkHttpClient
+import java.util.concurrent.TimeUnit
 
 class AppContainer(
     context: Context,
@@ -27,9 +28,20 @@ class AppContainer(
     val notificationController = NotificationController(applicationContext)
     val reminderSink: ReminderSink = AndroidReminderSink(applicationContext)
     val demoSource = VariantDemoSourceFactory.create()
-    private val httpClient = OkHttpClient.Builder().build()
+    // HTTP 与 WebSocket 各自预配置超时，组件不再各自 newBuilder，避免多份连接池配置漂移。
+    private val httpClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(10, TimeUnit.SECONDS)
+        .callTimeout(10, TimeUnit.SECONDS)
+        .build()
+    private val webSocketClient = OkHttpClient.Builder()
+        .connectTimeout(10, TimeUnit.SECONDS)
+        // WS 静默期可能长达 30 秒（心跳间隔），readTimeout 交给应用层 idle 检测。
+        .readTimeout(0, TimeUnit.MILLISECONDS)
+        .callTimeout(10, TimeUnit.SECONDS)
+        .build()
     private val roomApi = BiliRoomApi(httpClient)
-    private val liveGateway = BiliLiveGateway(httpClient, roomApi)
+    private val liveGateway = BiliLiveGateway(webSocketClient, roomApi)
     private val coreSessionController = SessionController(
         gateway = liveGateway,
         connectivity = connectivityObserver,

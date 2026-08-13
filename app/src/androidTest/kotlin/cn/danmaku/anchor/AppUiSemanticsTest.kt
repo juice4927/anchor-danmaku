@@ -13,6 +13,8 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.unit.dp
+import cn.danmaku.anchor.model.LiveMessage
+import cn.danmaku.anchor.model.Money
 import cn.danmaku.anchor.ui.room.RoomScreen
 import cn.danmaku.anchor.ui.room.RoomUiState
 import cn.danmaku.anchor.ui.theme.AnchorTheme
@@ -40,7 +42,7 @@ class AppUiSemanticsTest {
                             reconnectDelaySeconds = 15,
                         ),
                         messages = listOf(
-                            DanmakuMessage(
+                            LiveMessage.DanmakuMessage(
                                 id = "d1",
                                 roomId = 987654L,
                                 uid = 10001L,
@@ -48,8 +50,10 @@ class AppUiSemanticsTest {
                                 serverTimestampMillis = 1L,
                                 receivedAtMillis = 1L,
                                 text = "hello",
+                                medalName = null,
+                                medalLevel = null,
                             ),
-                            SuperChatMessage(
+                            LiveMessage.SuperChatMessage(
                                 id = "sc1",
                                 roomId = 987654L,
                                 uid = 10002L,
@@ -57,9 +61,11 @@ class AppUiSemanticsTest {
                                 serverTimestampMillis = 2L,
                                 receivedAtMillis = 2L,
                                 message = "加油",
-                                priceCny = 30.0,
+                                priceCny = Money.fromWholeCny(30),
+                                startTimeMillis = 2L,
+                                endTimeMillis = 60_002L,
                             ),
-                            GiftMessage(
+                            LiveMessage.GiftMessage(
                                 id = "g1",
                                 roomId = 987654L,
                                 uid = 10003L,
@@ -70,9 +76,9 @@ class AppUiSemanticsTest {
                                 count = 1,
                                 totalCoin = 100,
                                 coinType = "gold",
-                                estimatedCny = 1.0,
+                                estimatedCny = Money.fromWholeCny(1),
                             ),
-                            GuardMessage(
+                            LiveMessage.GuardMessage(
                                 id = "gu1",
                                 roomId = 987654L,
                                 uid = 10004L,
@@ -150,7 +156,7 @@ class AppUiSemanticsTest {
 
     @Test
     fun roomScreenAutoFollowPinsNewestMessageAndUserDragDisablesFollow() {
-        val messages = mutableStateListOf<AnchorMessage>()
+        val messages = mutableStateListOf<LiveMessage>()
         var scrolledAway = false
         composeRule.setContent {
             AnchorTheme {
@@ -174,7 +180,7 @@ class AppUiSemanticsTest {
 
         composeRule.runOnIdle {
             repeat(40) { index ->
-                messages += DanmakuMessage(
+                messages += LiveMessage.DanmakuMessage(
                     id = "m$index",
                     roomId = 987654L,
                     uid = 10000L + index,
@@ -182,6 +188,8 @@ class AppUiSemanticsTest {
                     serverTimestampMillis = index.toLong(),
                     receivedAtMillis = index.toLong(),
                     text = "消息 $index",
+                    medalName = null,
+                    medalLevel = null,
                 )
             }
         }
@@ -189,7 +197,7 @@ class AppUiSemanticsTest {
         composeRule.onNodeWithText("消息 39").assertIsDisplayed()
 
         composeRule.runOnIdle {
-            messages += DanmakuMessage(
+            messages += LiveMessage.DanmakuMessage(
                 id = "m40",
                 roomId = 987654L,
                 uid = 10040L,
@@ -197,6 +205,8 @@ class AppUiSemanticsTest {
                 serverTimestampMillis = 40L,
                 receivedAtMillis = 40L,
                 text = "最新消息",
+                medalName = null,
+                medalLevel = null,
             )
         }
         composeRule.waitForIdle()

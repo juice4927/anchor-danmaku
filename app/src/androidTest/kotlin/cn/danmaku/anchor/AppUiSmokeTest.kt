@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import cn.danmaku.anchor.data.AnchorUserPreferences
+import cn.danmaku.anchor.model.LiveMessage
 import cn.danmaku.anchor.ui.UiTags
 import cn.danmaku.anchor.ui.about.AboutPage
 import cn.danmaku.anchor.ui.about.AboutScreen
@@ -55,7 +56,7 @@ class AppUiSmokeTest {
                     state = RoomUiState(
                         connectionState = AnchorConnectionState(phase = ConnectionPhase.Connected, roomId = 987654L),
                         messages = listOf(
-                            DanmakuMessage(
+                            LiveMessage.DanmakuMessage(
                                 id = "1",
                                 roomId = 987654L,
                                 uid = 10001L,
@@ -63,6 +64,8 @@ class AppUiSmokeTest {
                                 serverTimestampMillis = 1L,
                                 receivedAtMillis = 1L,
                                 text = "hello",
+                                medalName = null,
+                                medalLevel = null,
                             ),
                         ),
                     ),

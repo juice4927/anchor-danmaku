@@ -1,10 +1,7 @@
 package cn.danmaku.anchor.reminder
 
-import cn.danmaku.anchor.AnchorMessage
-import cn.danmaku.anchor.GiftMessage
-import cn.danmaku.anchor.GuardMessage
-import cn.danmaku.anchor.SuperChatMessage
 import cn.danmaku.anchor.displayName
+import cn.danmaku.anchor.model.LiveMessage
 
 data class ReminderPayload(
     val key: String,
@@ -12,18 +9,18 @@ data class ReminderPayload(
     val content: String,
 ) {
     companion object {
-        fun fromMessage(message: AnchorMessage): ReminderPayload = when (message) {
-            is SuperChatMessage -> ReminderPayload(
+        fun fromMessage(message: LiveMessage): ReminderPayload = when (message) {
+            is LiveMessage.SuperChatMessage -> ReminderPayload(
                 key = message.id,
                 title = "醒目留言",
-                content = "${message.displayName()} · ¥${"%.2f".format(message.priceCny)}",
+                content = "${message.displayName()} · ¥${message.priceCny.toDisplayString()}",
             )
-            is GuardMessage -> ReminderPayload(
+            is LiveMessage.GuardMessage -> ReminderPayload(
                 key = message.id,
                 title = "舰队支持",
                 content = "${message.displayName()} 上舰 ×${message.count}",
             )
-            is GiftMessage -> ReminderPayload(
+            is LiveMessage.GiftMessage -> ReminderPayload(
                 key = message.id,
                 title = "高额礼物",
                 content = "${message.displayName()} · ${message.giftName} ×${message.count}",

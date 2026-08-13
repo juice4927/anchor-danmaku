@@ -135,6 +135,10 @@ class SessionControllerEdgeCasesTest {
         session.emit(GatewayEvent.DiagnosticsUpdated(GatewayDiagnostics(unknownCommandCount = 2)))
         scheduler.drainCurrent()
 
+        // 状态写入有 200ms 节流：推进虚拟时间让 idle 看门狗 flush 挂起的最终值。
+        scheduler.advanceTimeBy(1_000L)
+        scheduler.drainCurrent()
+
         val state = controller.state.value as SessionState.Connected
         assertThat(state.lastFrameAtMillis).isEqualTo(5_000L)
         assertThat(state.popularity).isEqualTo(42L)
