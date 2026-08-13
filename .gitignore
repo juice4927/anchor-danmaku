@@ -1,0 +1,16 @@
+.gradle/
+.gradle-user/
+.gradle-user-local/
+.android-user/
+.omx/
+.mimosa/
+.user-profile/
+.idea/
+local.properties
+keystore.properties
+keystore/
+**/build/
+*.iml
+captures/
+.externalNativeBuild/
+.cxx/

@@ -1,0 +1,262 @@
+package cn.danmaku.anchor.protocol.bili
+
+import com.google.common.truth.Truth.assertThat
+import kotlinx.serialization.decodeFromString
+import okhttp3.OkHttpClient
+import okhttp3.mockwebserver.Dispatcher
+import okhttp3.mockwebserver.MockResponse
+import okhttp3.mockwebserver.MockWebServer
+import okhttp3.mockwebserver.RecordedRequest
+import org.junit.Test
+
+class BiliRoomApiNet01ToNet06Test {
+    @Test
+    fun net01_resolveRoomReturnsHttpStatusFailureForServerError() = runBlockingTest {
+        withServer { server ->
+            server.enqueueHttpResponse("/room/v1/Room/room_init", 500, """{"message":"oops"}""")
+            val api = roomApi(server)
+            val failure = runCatching { api.resolveRoom(1234L) }.exceptionOrNull()
+            assertThat(failure).isInstanceOf(HttpStatusFailure::class.java)
+            assertThat((failure as HttpStatusFailure).statusCode).isEqualTo(500)
+        }
+    }
+
+    @Test
+    fun net02_resolveRoomRejectsMissingRoomId() = runBlockingTest {
+        withServer { server ->
+            server.enqueueHttpResponse(
+                "/room/v1/Room/room_init",
+                200,
+                """{"code":0,"message":"OK","ttl":1,"data":{"short_id":1234}}""",
+            )
+            val api = roomApi(server)
+            val failure = runCatching { api.resolveRoom(1234L) }.exceptionOrNull()
+            assertThat(failure).isInstanceOf(UnknownRecoverableFailure::class.java)
+            assertThat(failure).hasMessageThat().contains("Missing room_id")
+        }
+    }
+
+    @Test
+    fun net03_getDanmuInfoFiltersInvalidHostsAndReturnsOnlyValidEntries() = runBlockingTest {
+        withServer { server ->
+            server.enqueueHttpResponse(
+                "/xlive/web-room/v1/index/getDanmuInfo",
+                200,
+                """
+                {"code":0,"message":"OK","ttl":1,"data":{
+                  "token":"fixture-token-not-secret",
+                  "host_list":[
+                    {"host":"invalid host","wss_port":443},
+                    {"host":"broadcastlv.chat.bilibili.com","wss_port":443}
+                  ]
+                }}
+                """.trimIndent(),
+            )
+            val diagnostics = SafeDiagnostics()
+            val api = roomApi(server, diagnostics)
+            val info = api.getDanmuInfo(987654L)
+            assertThat(info.hostList).hasSize(1)
+            assertThat(info.hostList.single().host).isEqualTo("broadcastlv.chat.bilibili.com")
+            assertThat(diagnostics.snapshot()["invalid_host_entry"]).isEqualTo(1L)
+        }
+    }
+
+    @Test
+    fun net04_getDanmuInfoRejectsWhenNoValidHostsRemain() = runBlockingTest {
+        withServer { server ->
+            server.enqueueHttpResponse("/xlive/web-room/v1/index/getDanmuInfo", 200, readFixtureText("http/danmu-info-no-host.json"))
+            val api = roomApi(server)
+            val failure = runCatching { api.getDanmuInfo(987654L) }.exceptionOrNull()
+            assertThat(failure).isInstanceOf(EndpointUnavailableFailure::class.java)
+        }
+    }
+
+    @Test
+    fun net05_deserializesSparseRoomInitResponse() {
+        val parsed = testJson.decodeFromString<BiliRoomInitResponse>(
+            """{"code":0,"data":{"room_id":987654}}""",
+        )
+        assertThat(parsed.code).isEqualTo(0)
+        assertThat(parsed.data?.roomId).isEqualTo(987654L)
+        assertThat(parsed.data?.shortId).isNull()
+        assertThat(parsed.data?.pwdVerified).isNull()
+    }
+
+    @Test
+    fun net06_deserializesSparseDanmuInfoResponse() {
+        val parsed = testJson.decodeFromString<BiliDanmuInfoResponse>(
+            """{"code":0,"data":{"token":"fixture-token-not-secret","host_list":[{"host":"broadcastlv.chat.bilibili.com"},{"wss_port":443}]}}""",
+        )
+        assertThat(parsed.data?.hostList).hasSize(2)
+        assertThat(parsed.data?.hostList?.first()?.host).isEqualTo("broadcastlv.chat.bilibili.com")
+        assertThat(parsed.data?.hostList?.first()?.wssPort).isNull()
+        assertThat(parsed.data?.hostList?.last()?.host).isNull()
+        assertThat(parsed.data?.hostList?.last()?.wssPort).isEqualTo(443)
+    }
+
+    @Test
+    fun net07_getDanmuInfoFallsBackToGetConfWhenV2IsRiskBlocked() = runBlockingTest {
+        withServer { server ->
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    val path = request.path ?: return MockResponse().setResponseCode(404)
+                    return when {
+                        path.startsWith("/x/web-interface/nav") -> wbiNavResponse()
+
+                        path.startsWith("/xlive/web-room/v1/index/getDanmuInfo") ->
+                            MockResponse()
+                                .setResponseCode(200)
+                                .setHeader("Content-Type", "application/json")
+                                .setBody("""{"code":-352,"message":"-352","ttl":1}""")
+
+                        path.startsWith("/room/v1/Danmu/getConf") ->
+                            MockResponse()
+                                .setResponseCode(200)
+                                .setHeader("Content-Type", "application/json")
+                                .setBody(
+                                    """
+                                    {"code":0,"message":"OK","data":{
+                                      "token":"fixture-token-not-secret",
+                                      "host_server_list":[
+                                        {"host":"broadcastlv.chat.bilibili.com","wss_port":443}
+                                      ]
+                                    }}
+                                    """.trimIndent(),
+                                )
+
+                        else -> MockResponse().setResponseCode(404)
+                    }
+                }
+            }
+            val api = roomApi(server)
+            val info = api.getDanmuInfo(987654L)
+            assertThat(info.hostList).hasSize(1)
+            assertThat(info.hostList.single().host).isEqualTo("broadcastlv.chat.bilibili.com")
+            assertThat(info.hostList.single().wssPort).isEqualTo(443)
+        }
+    }
+
+    @Test
+    fun net08_getDanmuInfoSignsV2RequestWithWbiParams() = runBlockingTest {
+        withServer { server ->
+            var capturedPath: String? = null
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    val path = request.path ?: return MockResponse().setResponseCode(404)
+                    return when {
+                        path.startsWith("/x/web-interface/nav") -> wbiNavResponse()
+
+                        path.startsWith("/xlive/web-room/v1/index/getDanmuInfo") -> {
+                            capturedPath = path
+                            MockResponse()
+                                .setResponseCode(200)
+                                .setHeader("Content-Type", "application/json")
+                                .setBody(
+                                    """
+                                    {"code":0,"message":"OK","ttl":1,"data":{
+                                      "token":"fixture-token-not-secret",
+                                      "host_list":[{"host":"broadcastlv.chat.bilibili.com","wss_port":443}]
+                                    }}
+                                    """.trimIndent(),
+                                )
+                        }
+
+                        else -> MockResponse().setResponseCode(404)
+                    }
+                }
+            }
+            val api = roomApi(server)
+            val info = api.getDanmuInfo(987654L)
+            assertThat(info.hostList).hasSize(1)
+
+            val path = capturedPath ?: throw AssertionError("getDanmuInfo was not called")
+            assertThat(path).contains("id=987654")
+            assertThat(path).contains("type=0")
+            assertThat(path).contains("web_location=444.8")
+            val wts = Regex("wts=(\\d+)").find(path)?.groupValues?.get(1)
+                ?: throw AssertionError("wts missing from request")
+            val wRid = Regex("w_rid=([0-9a-f]{32})").find(path)?.groupValues?.get(1)
+                ?: throw AssertionError("w_rid missing from request")
+            val expected = BiliWbiSigner.sign(
+                params = mapOf(
+                    "id" to "987654",
+                    "type" to "0",
+                    "web_location" to "444.8",
+                ),
+                imgKey = "7cd084941338484aae1ad9425b84077c",
+                subKey = "4932caff0ff746eab6f01bf08b70ac45",
+                wtsSeconds = wts.toLong(),
+            )
+            assertThat(wRid).isEqualTo(expected["w_rid"])
+        }
+    }
+
+    @Test
+    fun net09_getDanmuInfoFallsBackToGetConfWhenWbiKeysUnavailable() = runBlockingTest {
+        withServer { server ->
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    val path = request.path ?: return MockResponse().setResponseCode(404)
+                    return when {
+                        path.startsWith("/x/web-interface/nav") -> MockResponse().setResponseCode(404)
+
+                        path.startsWith("/room/v1/Danmu/getConf") ->
+                            MockResponse()
+                                .setResponseCode(200)
+                                .setHeader("Content-Type", "application/json")
+                                .setBody(
+                                    """
+                                    {"code":0,"message":"OK","data":{
+                                      "token":"fixture-token-not-secret",
+                                      "host_server_list":[
+                                        {"host":"broadcastlv.chat.bilibili.com","wss_port":443}
+                                      ]
+                                    }}
+                                    """.trimIndent(),
+                                )
+
+                        else -> MockResponse().setResponseCode(404)
+                    }
+                }
+            }
+            val api = roomApi(server)
+            val info = api.getDanmuInfo(987654L)
+            assertThat(info.hostList).hasSize(1)
+            assertThat(info.hostList.single().host).isEqualTo("broadcastlv.chat.bilibili.com")
+        }
+    }
+
+    private fun runBlockingTest(block: suspend () -> Unit) = kotlinx.coroutines.runBlocking { block() }
+
+    private fun roomApi(server: MockWebServer, diagnostics: SafeDiagnostics = SafeDiagnostics()): BiliRoomApi =
+        BiliRoomApi(
+            client = OkHttpClient.Builder().build(),
+            diagnostics = diagnostics,
+            baseHttpUrl = server.url("/"),
+            wbiNavUrl = server.url("/x/web-interface/nav"),
+        )
+
+    private fun MockWebServer.enqueueHttpResponse(pathPrefix: String, code: Int, body: String) {
+        dispatcher = object : Dispatcher() {
+            override fun dispatch(request: RecordedRequest): MockResponse {
+                val path = request.path ?: return MockResponse().setResponseCode(404)
+                return when {
+                    path.startsWith("/x/web-interface/nav") -> wbiNavResponse()
+                    path.startsWith(pathPrefix) ->
+                        MockResponse().setResponseCode(code).setHeader("Content-Type", "application/json").setBody(body)
+                    else -> MockResponse().setResponseCode(404)
+                }
+            }
+        }
+    }
+
+    private fun withServer(block: suspend (MockWebServer) -> Unit) = kotlinx.coroutines.runBlocking {
+        val server = MockWebServer()
+        server.start()
+        try {
+            block(server)
+        } finally {
+            server.shutdown()
+        }
+    }
+}

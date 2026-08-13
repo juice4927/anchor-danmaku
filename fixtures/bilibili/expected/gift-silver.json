@@ -1,0 +1,12 @@
+{
+  "type": "gift",
+  "id": "gift-101",
+  "roomId": 987654,
+  "uid": 10001,
+  "userName": "测试观众",
+  "giftName": "辣条",
+  "count": 3,
+  "totalCoin": 0,
+  "coinType": "silver",
+  "estimatedCny": null
+}

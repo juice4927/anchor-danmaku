@@ -1,0 +1,11 @@
+{
+  "type": "danmaku",
+  "roomId": 987654,
+  "uid": 10001,
+  "userName": "测试观众",
+  "text": "测试弹幕",
+  "medalName": "测试牌",
+  "medalLevel": 7,
+  "repeatCount": 1,
+  "serverTimestampMillis": 1723420800000
+}

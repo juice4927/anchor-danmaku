@@ -1,0 +1,262 @@
+{
+  "fixtures": [
+    {
+      "id": "room-init-valid-short",
+      "sourceFile": "http/room-init-valid-short.json",
+      "sha256": "8c6fb6aaa7a0e29b71ffe8bf7d6149e677d793c7468637db4911fc53999ba69f",
+      "operation": "http",
+      "compression": "none",
+      "tags": [
+        "room-init",
+        "short-id",
+        "success"
+      ]
+    },
+    {
+      "id": "room-init-not-found",
+      "sourceFile": "http/room-init-not-found.json",
+      "sha256": "42ec160cfbcbd21256f4b6114c0f9bdcc8297b8de53bf440ca8c63d854fbdf68",
+      "operation": "http",
+      "compression": "none",
+      "expectedError": "RoomNotFound",
+      "tags": [
+        "room-init",
+        "not-found"
+      ]
+    },
+    {
+      "id": "room-init-restricted",
+      "sourceFile": "http/room-init-restricted.json",
+      "sha256": "129b71d8aba51a151dac132cd090110a5abe122ddfacef7bdfb37e80ac8296b2",
+      "operation": "http",
+      "compression": "none",
+      "expectedError": "RoomRestricted",
+      "tags": [
+        "room-init",
+        "restricted"
+      ]
+    },
+    {
+      "id": "room-init-not-live",
+      "sourceFile": "http/room-init-not-live.json",
+      "sha256": "ca9eed18cf712714eb8d183095be68b5c8d4c6f2169b624f542aec8bfd3c2be9",
+      "operation": "http",
+      "compression": "none",
+      "tags": [
+        "room-init",
+        "not-live"
+      ]
+    },
+    {
+      "id": "danmu-info-valid",
+      "sourceFile": "http/danmu-info-valid.json",
+      "sha256": "5632f1714597879f6200e07452caa242cd94445694883f7646858db4e259b150",
+      "operation": "http",
+      "compression": "none",
+      "tags": [
+        "danmu-info",
+        "host-list",
+        "success"
+      ]
+    },
+    {
+      "id": "danmu-info-no-host",
+      "sourceFile": "http/danmu-info-no-host.json",
+      "sha256": "65b7d1cce616dacec28951916fd5bfab9763c10052633fd88c13cb740b8cceda",
+      "operation": "http",
+      "compression": "none",
+      "expectedError": "EndpointUnavailable",
+      "tags": [
+        "danmu-info",
+        "empty-host-list"
+      ]
+    },
+    {
+      "id": "auth-ok",
+      "sourceFile": "ws/auth-ok.b64",
+      "sha256": "d0e318de4e5bd4d3a1990193446012a0797bfdd21241609c8a32b47c050db65d",
+      "protocolVersion": 1,
+      "operation": 8,
+      "compression": "none",
+      "tags": [
+        "auth",
+        "success"
+      ]
+    },
+    {
+      "id": "heartbeat-popularity",
+      "sourceFile": "ws/heartbeat-popularity.b64",
+      "sha256": "39fb9cf255b6a8c9af23b9afd0d0f6134a049018b0a0fc4c8871a56182db1943",
+      "protocolVersion": 1,
+      "operation": 3,
+      "compression": "none",
+      "tags": [
+        "heartbeat",
+        "popularity"
+      ]
+    },
+    {
+      "id": "danmaku-plain",
+      "sourceFile": "ws/danmaku-plain.b64",
+      "sha256": "42eccc57121abbf52c0e4134dc4b4ae63730115e2743e790dab6c4fc8be0c4b9",
+      "protocolVersion": 1,
+      "operation": 5,
+      "compression": "none",
+      "expectedFile": "expected/danmaku-plain.json",
+      "tags": [
+        "cmd",
+        "danmaku",
+        "plain"
+      ]
+    },
+    {
+      "id": "danmaku-zlib-nested",
+      "sourceFile": "ws/danmaku-zlib-nested.b64",
+      "sha256": "435ea341311e5207a29f676dff4f7922227cea18765917d2fb4f5668183ab4c3",
+      "protocolVersion": 2,
+      "operation": 5,
+      "compression": "zlib",
+      "expectedFile": "expected/danmaku-zlib-nested.json",
+      "tags": [
+        "cmd",
+        "danmaku",
+        "zlib",
+        "nested"
+      ]
+    },
+    {
+      "id": "danmaku-brotli-nested",
+      "sourceFile": "ws/danmaku-brotli-nested.b64",
+      "sha256": "e39c27eb31885b86d0bcbbbcf7c838e07bce5895f5dce2d793584114644b7fc5",
+      "protocolVersion": 3,
+      "operation": 5,
+      "compression": "brotli",
+      "expectedFile": "expected/danmaku-brotli-nested.json",
+      "tags": [
+        "cmd",
+        "danmaku",
+        "brotli",
+        "nested"
+      ]
+    },
+    {
+      "id": "super-chat",
+      "sourceFile": "ws/super-chat.b64",
+      "sha256": "f05ff5bd98b2e6464542916dbe654c51986e422df537559ccdb537d94ca034b6",
+      "protocolVersion": 1,
+      "operation": 5,
+      "compression": "none",
+      "expectedFile": "expected/super-chat.json",
+      "tags": [
+        "cmd",
+        "super-chat"
+      ]
+    },
+    {
+      "id": "gift-gold",
+      "sourceFile": "ws/gift-gold.b64",
+      "sha256": "28328910dd0d6c1491c647bf85e9e848d4c0690fee2858b05b8f02d1fd872933",
+      "protocolVersion": 1,
+      "operation": 5,
+      "compression": "none",
+      "expectedFile": "expected/gift-gold.json",
+      "tags": [
+        "cmd",
+        "gift",
+        "gold"
+      ]
+    },
+    {
+      "id": "gift-silver",
+      "sourceFile": "ws/gift-silver.b64",
+      "sha256": "74a50f25f9f052345fa8d65dca828e9f1478cd51b7889bc8923a949d388d54cd",
+      "protocolVersion": 1,
+      "operation": 5,
+      "compression": "none",
+      "expectedFile": "expected/gift-silver.json",
+      "tags": [
+        "cmd",
+        "gift",
+        "silver"
+      ]
+    },
+    {
+      "id": "guard-buy",
+      "sourceFile": "ws/guard-buy.b64",
+      "sha256": "511a3adad028cf753f13c03e872f669c35bd3635af1dbed38169195ef76a30ca",
+      "protocolVersion": 1,
+      "operation": 5,
+      "compression": "none",
+      "expectedFile": "expected/guard-buy.json",
+      "tags": [
+        "cmd",
+        "guard"
+      ]
+    },
+    {
+      "id": "multiple-packets",
+      "sourceFile": "ws/multiple-packets.b64",
+      "sha256": "ecf33db53e8f5c561d4b452d36e26c14a9f86e56b6c5eeb48ea9ea155fbb58b0",
+      "protocolVersion": 1,
+      "operation": 5,
+      "compression": "none",
+      "tags": [
+        "cmd",
+        "multi-packet"
+      ]
+    },
+    {
+      "id": "unknown-command",
+      "sourceFile": "ws/unknown-command.b64",
+      "sha256": "8c31bf7ae1afc6b565aaa2b5aa821345d521957bf10a0086eb7247b537192668",
+      "protocolVersion": 1,
+      "operation": 5,
+      "compression": "none",
+      "expectedError": "UnknownCommandIgnored",
+      "tags": [
+        "cmd",
+        "unknown"
+      ]
+    },
+    {
+      "id": "unsupported-protocol-version",
+      "sourceFile": "ws/unsupported-protocol-version.b64",
+      "sha256": "243f8ec2201d36912052dbf25ae538d91ec07c13f6a7ccbb1dd46c3d3df86f28",
+      "protocolVersion": 4,
+      "operation": 5,
+      "compression": "unsupported",
+      "expectedError": "ProtocolUnsupported",
+      "tags": [
+        "cmd",
+        "unsupported-version"
+      ]
+    },
+    {
+      "id": "malformed-header",
+      "sourceFile": "ws/malformed-header.b64",
+      "sha256": "e7eceb5dc8c672b9a6590234801e42482423d83237c7ce5128fbb26f74228608",
+      "protocolVersion": 1,
+      "operation": 5,
+      "compression": "none",
+      "expectedError": "MalformedPacket",
+      "tags": [
+        "packet",
+        "malformed"
+      ]
+    },
+    {
+      "id": "oversized-decompressed",
+      "sourceFile": "ws/oversized-decompressed.b64",
+      "sha256": "28262ae3031d53d36f0ca5c58b1a4f27f325bfd3df79f1f9c5496280c9a46de7",
+      "protocolVersion": 2,
+      "operation": 5,
+      "compression": "zlib",
+      "expectedError": "OversizedDecompressedPayload",
+      "tags": [
+        "packet",
+        "limit",
+        "oversized"
+      ]
+    }
+  ]
+}

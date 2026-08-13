@@ -1,0 +1,15 @@
+{
+  "code": 0,
+  "message": "OK",
+  "ttl": 1,
+  "data": {
+    "room_id": 987654,
+    "short_id": 1234,
+    "uid": 900001,
+    "live_status": 1,
+    "is_hidden": false,
+    "is_locked": false,
+    "encrypted": false,
+    "pwd_verified": true
+  }
+}

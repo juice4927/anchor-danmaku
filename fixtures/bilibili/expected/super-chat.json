@@ -1,0 +1,11 @@
+{
+  "type": "superChat",
+  "id": "70001",
+  "roomId": 987654,
+  "uid": 10001,
+  "userName": "测试观众",
+  "message": "醒目留言测试",
+  "priceCny": "30",
+  "startTimeMillis": 1723420830000,
+  "endTimeMillis": 1723420890000
+}

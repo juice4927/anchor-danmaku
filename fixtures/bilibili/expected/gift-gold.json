@@ -1,0 +1,12 @@
+{
+  "type": "gift",
+  "id": "gift-100",
+  "roomId": 987654,
+  "uid": 10001,
+  "userName": "测试观众",
+  "giftName": "小心心风暴",
+  "count": 2,
+  "totalCoin": 100000,
+  "coinType": "gold",
+  "estimatedCny": "100"
+}

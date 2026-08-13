@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Accept SDK licenses and install pinned components
+        run: |
+          yes | sdkmanager --licenses >/dev/null 2>&1 || true
+          sdkmanager "platforms;android-34" "build-tools;34.0.0" >/dev/null
+
+      - name: Create signing keystore for this run
+        run: |
+          if [ ! -f keystore.properties ]; then
+            mkdir -p keystore
+            keytool -genkeypair -v \
+              -keystore keystore/ci-release.jks \
+              -storepass anchorci123 -keypass anchorci123 -alias anchor \
+              -keyalg RSA -keysize 2048 -validity 10000 \
+              -dname "CN=Anchor Danmaku CI, OU=CI, O=AnchorDanmaku, L=Local, ST=Local, C=CN" \
+              -noprompt
+            printf 'storeFile=keystore/ci-release.jks\nstorePassword=anchorci123\nkeyAlias=anchor\nkeyPassword=anchorci123\n' > keystore.properties
+          fi
+
+      - name: Run complete offline gate
+        run: ./gradlew --no-daemon verifyAll
+
+      - name: Upload APKs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: apks
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk

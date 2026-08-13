@@ -1,0 +1,11 @@
+{
+  "type": "danmaku",
+  "roomId": 987654,
+  "uid": 10001,
+  "userName": "测试观众",
+  "text": "压缩弹幕-brotli",
+  "medalName": "压缩牌B",
+  "medalLevel": 6,
+  "repeatCount": 1,
+  "serverTimestampMillis": 1723420820000
+}

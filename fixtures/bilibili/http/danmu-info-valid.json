@@ -1,0 +1,22 @@
+{
+  "code": 0,
+  "message": "OK",
+  "ttl": 1,
+  "data": {
+    "token": "fixture-token-not-secret",
+    "host_list": [
+      {
+        "host": "broadcastlv.chat.bilibili.com",
+        "port": 2244,
+        "ws_port": 2245,
+        "wss_port": 443
+      },
+      {
+        "host": "tx-bj-live-comet-01.chat.bilibili.com.",
+        "port": 2244,
+        "ws_port": 2245,
+        "wss_port": 8443
+      }
+    ]
+  }
+}

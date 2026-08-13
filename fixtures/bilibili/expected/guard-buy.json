@@ -1,0 +1,10 @@
+{
+  "type": "guard",
+  "id": "guard-9001",
+  "roomId": 987654,
+  "uid": 10001,
+  "userName": "测试观众",
+  "guardLevel": 3,
+  "count": 1,
+  "serverTimestampMillis": 1723420860000
+}
