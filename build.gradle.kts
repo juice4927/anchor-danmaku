@@ -4,7 +4,15 @@ import java.security.MessageDigest
 import java.util.Base64
 import java.util.zip.ZipFile
 import javax.xml.parsers.DocumentBuilderFactory
+import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
+import org.gradle.api.file.ConfigurableFileCollection
+import org.gradle.api.file.DirectoryProperty
+import org.gradle.api.tasks.InputDirectory
+import org.gradle.api.tasks.InputFiles
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
+import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.testing.Test
 
 plugins {
@@ -25,22 +33,31 @@ allprojects {
     }
 }
 
-fun ByteArray.sha256(): String =
-    MessageDigest.getInstance("SHA-256")
-        .digest(this)
-        .joinToString("") { "%02x".format(it) }
+// ---------------------------------------------------------------------------
+// 门禁任务均为声明 inputs 的 DefaultTask 子类，兼容 Configuration Cache。
+// 注意：任务类只能引用外部类型（Gradle API），不能引用脚本顶层的成员函数，
+// 否则 Kotlin 会将其编译为脚本类的 inner class 导致任务无法实例化。
+// ---------------------------------------------------------------------------
 
-fun requireGate(condition: Boolean, message: () -> String) {
-    if (!condition) throw GradleException(message())
+abstract class VerificationTask : DefaultTask() {
+    protected fun requireGate(condition: Boolean, message: () -> String) {
+        if (!condition) throw GradleException(message())
+    }
+
+    protected fun ByteArray.sha256(): String =
+        MessageDigest.getInstance("SHA-256")
+            .digest(this)
+            .joinToString("") { "%02x".format(it) }
 }
 
-val protocolFixtureCheck by tasks.registering {
-    group = "verification"
-    description = "Validates the versioned Bilibili protocol fixtures."
-    val fixtureRoot = layout.projectDirectory.dir("fixtures/bilibili")
-    inputs.dir(fixtureRoot)
-    doLast {
-        val root = fixtureRoot.asFile
+abstract class ProtocolFixtureCheck : VerificationTask() {
+    @get:InputDirectory
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val fixtureRoot: DirectoryProperty
+
+    @TaskAction
+    fun run() {
+        val root = fixtureRoot.get().asFile
         val required = listOf(
             "manifest.json",
             "http/room-init-valid-short.json",
@@ -178,14 +195,14 @@ val protocolFixtureCheck by tasks.registering {
     }
 }
 
-val permissionAllowlistCheck by tasks.registering {
-    group = "verification"
-    description = "Validates the merged release manifest permission and component allowlist."
-    dependsOn(":app:processReleaseMainManifest")
-    doLast {
-        val manifest = fileTree("app/build/intermediates/merged_manifest/release")
-            .matching { include("**/AndroidManifest.xml") }
-            .files
+abstract class PermissionAllowlistCheck : VerificationTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val mergedManifests: ConfigurableFileCollection
+
+    @TaskAction
+    fun run() {
+        val manifest = mergedManifests.files
             .maxByOrNull { it.lastModified() }
             ?: throw GradleException("Merged release manifest was not produced")
         val factory = DocumentBuilderFactory.newInstance().apply { isNamespaceAware = true }
@@ -285,14 +302,18 @@ val permissionAllowlistCheck by tasks.registering {
     }
 }
 
-val releaseHygieneCheck by tasks.registering {
-    group = "verification"
-    description = "Validates that release artifacts contain no debug fixture or sensitive material."
-    dependsOn(":app:assembleRelease")
-    doLast {
-        val apk = fileTree("app/build/outputs/apk/release")
-            .matching { include("*.apk") }
-            .singleFile
+abstract class ReleaseHygieneCheck : VerificationTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val releaseApks: ConfigurableFileCollection
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val sources: ConfigurableFileCollection
+
+    @TaskAction
+    fun run() {
+        val apk = releaseApks.files.single()
         val forbidden = listOf(
             "fixtures/bilibili",
             "fixture-token-not-secret",
@@ -322,11 +343,6 @@ val releaseHygieneCheck by tasks.registering {
                 requireGate(hit == null) { "Release APK contains forbidden marker '$hit' in ${entry.name}" }
             }
         }
-        val sourceFiles = files(
-            fileTree("app/src/main") { include("**/*.kt", "**/*.java", "**/*.xml") },
-            fileTree("app/src/release") { include("**/*.kt", "**/*.java", "**/*.xml") },
-            fileTree("core") { include("**/src/main/**/*.kt", "**/src/main/**/*.java", "**/src/main/**/*.xml") },
-        ).asFileTree
         val forbiddenSourcePatterns = listOf(
             Regex("""android\.util\.Log"""),
             Regex("""\bLog\.(v|d|i|w|e|wtf)\s*\("""),
@@ -335,24 +351,23 @@ val releaseHygieneCheck by tasks.registering {
             Regex("""hostnameVerifier\s*=\s*HostnameVerifier\s*\{[^}]*true"""),
             Regex("""\b(TODO|FIXME|NotImplementedError)\b"""),
         )
-        sourceFiles.forEach { source ->
+        sources.files.forEach { source ->
             val content = source.readText()
             val pattern = forbiddenSourcePatterns.firstOrNull { it.containsMatchIn(content) }
-            requireGate(pattern == null) { "Release source hygiene violation in ${source.relativeTo(projectDir)}: $pattern" }
+            requireGate(pattern == null) { "Release source hygiene violation in $source: $pattern" }
         }
         logger.lifecycle("releaseHygieneCheck PASS: ${apk.name}")
     }
 }
 
-val perfSmoke by tasks.registering {
-    group = "verification"
-    description = "Runs the deterministic 12,000-event pipeline smoke test."
-    dependsOn(":core:domain:test")
-    doLast {
-        val resultFiles = fileTree("core/domain/build/test-results/test") {
-            include("TEST-*.xml")
-        }.files
-        val matching = resultFiles.filter {
+abstract class PerfSmoke : VerificationTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val testResults: ConfigurableFileCollection
+
+    @TaskAction
+    fun run() {
+        val matching = testResults.files.filter {
             it.readText().contains("PerfSmoke", ignoreCase = true)
         }
         requireGate(matching.isNotEmpty()) {
@@ -371,13 +386,19 @@ val perfSmoke by tasks.registering {
     }
 }
 
-val apkSizeCheck by tasks.registering {
-    group = "verification"
-    description = "Validates APK existence and the 25 MiB release size limit."
-    dependsOn(":app:assembleDebug", ":app:assembleRelease")
-    doLast {
-        val debug = fileTree("app/build/outputs/apk/debug").matching { include("*.apk") }.singleFile
-        val release = fileTree("app/build/outputs/apk/release").matching { include("*.apk") }.singleFile
+abstract class ApkSizeCheck : VerificationTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val debugApks: ConfigurableFileCollection
+
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val releaseApks: ConfigurableFileCollection
+
+    @TaskAction
+    fun run() {
+        val debug = debugApks.files.single()
+        val release = releaseApks.files.single()
         val maxReleaseBytes = 25L * 1024L * 1024L
         requireGate(debug.isFile && release.isFile) { "Debug or release APK is missing" }
         requireGate(release.length() <= maxReleaseBytes) {
@@ -387,6 +408,68 @@ val apkSizeCheck by tasks.registering {
         logger.lifecycle("Release APK: ${release.absolutePath} | ${release.length()} | ${release.readBytes().sha256()}")
         logger.lifecycle("apkSizeCheck PASS")
     }
+}
+
+val protocolFixtureCheck = tasks.register<ProtocolFixtureCheck>("protocolFixtureCheck") {
+    group = "verification"
+    description = "Validates the versioned Bilibili protocol fixtures."
+    fixtureRoot.set(layout.projectDirectory.dir("fixtures/bilibili"))
+}
+
+val permissionAllowlistCheck = tasks.register<PermissionAllowlistCheck>("permissionAllowlistCheck") {
+    group = "verification"
+    description = "Validates the merged release manifest permission and component allowlist."
+    dependsOn(":app:processReleaseMainManifest")
+    mergedManifests.from(
+        fileTree(layout.projectDirectory.dir("app/build/intermediates/merged_manifest/release")) {
+            include("**/AndroidManifest.xml")
+        },
+    )
+}
+
+val releaseHygieneCheck = tasks.register<ReleaseHygieneCheck>("releaseHygieneCheck") {
+    group = "verification"
+    description = "Validates that release artifacts contain no debug fixture or sensitive material."
+    dependsOn(":app:assembleRelease")
+    releaseApks.from(
+        fileTree(layout.projectDirectory.dir("app/build/outputs/apk/release")) {
+            include("*.apk")
+        },
+    )
+    sources.from(
+        fileTree(layout.projectDirectory.dir("app/src/main")) { include("**/*.kt", "**/*.java", "**/*.xml") },
+        fileTree(layout.projectDirectory.dir("app/src/release")) { include("**/*.kt", "**/*.java", "**/*.xml") },
+        fileTree(layout.projectDirectory.dir("core/model/src/main")) { include("**/*.kt", "**/*.java", "**/*.xml") },
+        fileTree(layout.projectDirectory.dir("core/domain/src/main")) { include("**/*.kt", "**/*.java", "**/*.xml") },
+        fileTree(layout.projectDirectory.dir("core/protocol/src/main")) { include("**/*.kt", "**/*.java", "**/*.xml") },
+    )
+}
+
+val perfSmoke = tasks.register<PerfSmoke>("perfSmoke") {
+    group = "verification"
+    description = "Runs the deterministic 12,000-event pipeline smoke test."
+    dependsOn(":core:domain:test")
+    testResults.from(
+        fileTree(layout.projectDirectory.dir("core/domain/build/test-results/test")) {
+            include("TEST-*.xml")
+        },
+    )
+}
+
+val apkSizeCheck = tasks.register<ApkSizeCheck>("apkSizeCheck") {
+    group = "verification"
+    description = "Validates APK existence and the 25 MiB release size limit."
+    dependsOn(":app:assembleDebug", ":app:assembleRelease")
+    debugApks.from(
+        fileTree(layout.projectDirectory.dir("app/build/outputs/apk/debug")) {
+            include("*.apk")
+        },
+    )
+    releaseApks.from(
+        fileTree(layout.projectDirectory.dir("app/build/outputs/apk/release")) {
+            include("*.apk")
+        },
+    )
 }
 
 tasks.register("verifyAll") {

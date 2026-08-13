@@ -1,13 +1,6 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 import java.util.Properties
 
-val keystorePropertiesFile = rootProject.file("keystore.properties")
-val keystoreProperties = Properties()
-if (!keystorePropertiesFile.exists()) {
-    throw GradleException("缺少 keystore.properties 签名配置，无法构建已签名的 release 包。")
-}
-keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
-
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -28,13 +21,25 @@ android {
         vectorDrawables.useSupportLibrary = true
     }
 
-    signingConfigs {
-        create("release") {
+    // 签名配置可选：keystore.properties 缺失时 release 构建产出未签名 APK，
+    // 不阻断 debug 构建与全新环境（CI 或本地）的配置阶段。
+    val keystorePropertiesFile = rootProject.file("keystore.properties")
+    val releaseSigning = if (keystorePropertiesFile.exists()) {
+        val keystoreProperties = Properties()
+        keystorePropertiesFile.inputStream().use { keystoreProperties.load(it) }
+        signingConfigs.create("release") {
             storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
             storePassword = keystoreProperties["storePassword"] as String
             keyAlias = keystoreProperties["keyAlias"] as String
             keyPassword = keystoreProperties["keyPassword"] as String
         }
+    } else {
+        logger.warn("keystore.properties 缺失：release 将产出未签名 APK。")
+        null
+    }
+
+    signingConfigs {
+        // release 签名由 keystore.properties 提供；缺失时 releaseSigning 为 null。
     }
 
     buildTypes {
@@ -43,7 +48,7 @@ android {
             versionNameSuffix = "-debug"
         }
         release {
-            signingConfig = signingConfigs.getByName("release")
+            releaseSigning?.let { signingConfig = it }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -58,9 +63,11 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
-        freeCompilerArgs += "-Xjsr305=strict"
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+            freeCompilerArgs.add("-Xjsr305=strict")
+        }
     }
 
     buildFeatures {
@@ -91,7 +98,9 @@ android {
 }
 
 tasks.withType<KotlinCompile>().configureEach {
-    kotlinOptions.jvmTarget = "17"
+    compilerOptions {
+        jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+    }
 }
 
 tasks.withType<Test>().configureEach {
@@ -127,7 +136,7 @@ dependencies {
     implementation(libs.compose.foundation)
     implementation(libs.compose.ui.tooling.preview)
     implementation(libs.compose.material3)
-    implementation(libs.compose.material.icons.extended)
+    implementation(libs.compose.material.icons.core)
 
     debugImplementation(libs.compose.ui.tooling)
     debugImplementation(libs.compose.ui.test.manifest)

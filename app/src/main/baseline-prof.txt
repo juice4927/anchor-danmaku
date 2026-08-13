@@ -1,0 +1,32 @@
+# 手写 Baseline Profile：覆盖启动与消息列表热路径（类加载规则）。
+# 格式说明：类规则用 `L<类名>;`（仅支持 L flag）；方法规则才用 `HSPL`。
+# 不用 `;->*` 通配符，规避 AGP 8.5 ExpandArtProfileWildcards 的展开 bug。
+Lcn/danmaku/anchor/AnchorApplication;
+Lcn/danmaku/anchor/AppContainer;
+Lcn/danmaku/anchor/MainActivity;
+Lcn/danmaku/anchor/ui/AppNavigationKt;
+Lcn/danmaku/anchor/ui/theme/ThemeKt;
+Lcn/danmaku/anchor/ui/theme/TypeKt;
+Lcn/danmaku/anchor/ui/components/MessageRowsKt;
+Lcn/danmaku/anchor/ui/room/RoomScreenKt;
+Lcn/danmaku/anchor/ui/connect/ConnectScreenKt;
+Lcn/danmaku/anchor/ui/settings/SettingsScreenKt;
+Landroidx/activity/ComponentActivity;
+Landroidx/activity/compose/ComponentActivityKt;
+Landroidx/compose/runtime/ComposerImpl;
+Landroidx/compose/runtime/CompositionImpl;
+Landroidx/compose/runtime/Recomposer;
+Landroidx/compose/ui/platform/AndroidComposeView;
+Landroidx/compose/ui/platform/ComposeView;
+Landroidx/compose/foundation/lazy/LazyColumnKt;
+Landroidx/compose/foundation/lazy/LazyListState;
+Landroidx/compose/foundation/lazy/LazyListKt;
+Landroidx/compose/material3/SurfaceKt;
+Landroidx/compose/material3/TextKt;
+Landroidx/compose/material3/IconKt;
+Landroidx/compose/material3/IconButtonKt;
+Landroidx/compose/material3/ScaffoldKt;
+Landroidx/compose/material3/CardKt;
+Landroidx/compose/foundation/TextKt;
+Landroidx/compose/ui/text/TextLayoutKt;
+Landroidx/compose/ui/text/AndroidTextPainterKt;

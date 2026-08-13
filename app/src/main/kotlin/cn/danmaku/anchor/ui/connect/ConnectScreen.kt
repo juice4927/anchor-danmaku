@@ -19,9 +19,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.ChevronRight
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -185,7 +183,7 @@ fun ConnectScreen(
             item {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(
-                        Icons.Outlined.Sensors,
+                        painter = painterResource(R.drawable.ic_sensors),
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.tertiary,
                         modifier = Modifier.size(18.dp),
@@ -233,7 +231,7 @@ fun ConnectScreen(
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Icon(
-                                    Icons.Outlined.Sensors,
+                                    painter = painterResource(R.drawable.ic_sensors),
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier.size(18.dp),
@@ -246,7 +244,7 @@ fun ConnectScreen(
                                 modifier = Modifier.weight(1f),
                             )
                             Icon(
-                                Icons.Outlined.ChevronRight,
+                                painter = painterResource(R.drawable.ic_chevron_right),
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                             )

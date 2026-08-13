@@ -23,12 +23,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.ArrowBack
-import androidx.compose.material.icons.outlined.CleaningServices
-import androidx.compose.material.icons.outlined.Pause
-import androidx.compose.material.icons.outlined.PlayArrow
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Settings
-import androidx.compose.material.icons.outlined.South
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.Icon
@@ -53,9 +49,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.danmaku.anchor.ConnectionPhase
+import cn.danmaku.anchor.R
 import cn.danmaku.anchor.ui.UiTags
 import cn.danmaku.anchor.ui.components.MessageRow
 import kotlinx.coroutines.delay
@@ -234,18 +232,26 @@ fun RoomScreen(
                             onClick = onPauseToggle,
                             modifier = Modifier.testTag(UiTags.RoomPauseButton),
                         ) {
-                            Icon(
-                                if (state.isPaused) Icons.Outlined.PlayArrow else Icons.Outlined.Pause,
-                                contentDescription = if (state.isPaused) "恢复" else "暂停",
-                                tint = MaterialTheme.colorScheme.onSurface,
-                            )
+                            if (state.isPaused) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_play_arrow),
+                                    contentDescription = "恢复",
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                )
+                            } else {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_pause),
+                                    contentDescription = "暂停",
+                                    tint = MaterialTheme.colorScheme.onSurface,
+                                )
+                            }
                         }
                         IconButton(
                             onClick = onClear,
                             modifier = Modifier.testTag(UiTags.RoomClearButton),
                         ) {
                             Icon(
-                                Icons.Outlined.CleaningServices,
+                                painter = painterResource(R.drawable.ic_cleaning_services),
                                 contentDescription = "清屏",
                                 tint = MaterialTheme.colorScheme.onSurface,
                             )
@@ -255,7 +261,7 @@ fun RoomScreen(
                             modifier = Modifier.testTag(UiTags.RoomJumpButton),
                         ) {
                             Icon(
-                                Icons.Outlined.South,
+                                painter = painterResource(R.drawable.ic_south),
                                 contentDescription = "回到底部",
                                 tint = MaterialTheme.colorScheme.onSurface,
                             )
