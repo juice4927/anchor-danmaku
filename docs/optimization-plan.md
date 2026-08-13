@@ -4,32 +4,35 @@
 
 ## P0 正确性与可靠性
 
-1. **去重窗口为 0，去重实际不生效**
+> 状态：✅ 已完成（详见 `docs/implementation-log.md` 阶段 14）。
+
+1. **去重窗口为 0，去重实际不生效** ✅
    `MessageDeduplicator.WINDOW_MILLIS = 0L`，只有同毫秒内相同 id 的消息才会被去重，跨毫秒的重复帧（重连、TCP 重发）会重复进入管线（部分被 3 秒合并器合并成 ×N，超出窗口的会重复展示）。
-   建议：窗口改为 10~30 秒，或改用内容指纹（uid+text+serverTimestamp）做去重键。
+   修复：窗口改为 10 秒；清理改为仅在接近容量时执行（O(1) 摊还）。窗口不能更大：弹幕 id 含按秒的服务端时间戳，同用户同秒同文本会被视为同 id，过长的窗口会吞掉 3 秒合并器的 ×N 计数。
 
-2. **弹幕合并窗口表无限增长**
+2. **弹幕合并窗口表无限增长** ✅
    `DanmakuCoalescer.windows` 是 `linkedMapOf`，只按 key 覆盖、从不按时间清理。高流量直播间运行数小时后，不同 (uid, text) 组合会累积成千上万条目，长期占用内存。
-   建议：`coalesce()` 时惰性清理过期窗口（lastSeenAt 超过窗口即删除），并加容量上限（如 4096，超出淘汰最旧）。
+   修复：新增 4,096 窗口上限；加入新窗口前先清理过期项、再淘汰最旧，保证存活窗口不被误杀。
 
-3. **WebSocket 事件通道无界**
-   `BiliWebSocketSession` 使用 `Channel(UNLIMITED)`。若下游解析/消费短暂变慢（如 GC、主线程繁忙），帧会在通道中无界堆积，极端高流量下有 OOM 风险。
-   建议：有界通道（如 4096）+ 丢最旧策略，或在解码端做合并节流。
+3. **WebSocket 事件通道无界** ✅
+   `BiliWebSocketSession` 使用 `Channel(UNLIMITED)`。若下游解析/消费暂时变慢，帧会在通道中无界堆积，极端高流量下有 OOM 风险。
+   修复：有界通道（容量 256）+ `DROP_OLDEST`，直播场景最新内容优先；关闭/失败事件被丢弃时由 SessionController 的 90 秒 idle 看门狗兜底重连。
 
-4. **前台服务每个状态变化都调用 startForeground**
-   `ConnectionForegroundService.ensureNotificationSync` 用 `collectLatest { startForeground(...) }`，而高流量房间每个数据包都会触发 `SessionState.Connected.copy(lastFrameAtMillis=...)` 状态更新，即每秒几十上百次 startForeground + Binder 事务，耗电且可能造成通知抖动。
-   建议：首次 startForeground 后改用 `NotificationManager.notify()` 更新；并对通知内容做节流（内容未变化不更新，或去抖 1~2 秒）。
+4. **前台服务每个状态变化都调用 startForeground** ✅
+   `ConnectionForegroundService.ensureNotificationSync` 用 `collectLatest { startForeground(...) }`，而高流量房间每个数据包都会触发 `SessionState.Connected.copy(lastFrameAtMillis=...)` 状态更新，即每秒几十上百次 startForeground + Binder 事务。
+   修复：首次 startForeground 后，后续仅当通知内容文本变化时调用 `NotificationManager.notify()`（内容相同直接跳过，天然节流）。
 
-5. **文档与代码安全边界不一致**
+5. **文档与代码安全边界不一致** ✅
    `docs/architecture.md` 声明"解压后最多 4 MiB、单帧最多 1000 个子包"，代码实际为 32 MiB（`BiliPacketCodec.Limits.maxDecompressedBytes`）与 20,000 子包。
-   建议：收敛代码到文档声明的更严格限制（4 MiB / 1000），或同步修改文档，保证安全审查依据一致。
+   处理：保留代码的 32 MiB / 20,000（`oversized-decompressed.b64` fixture 精确构造为 16 MiB，说明 32 MiB 是原作者的主动选择；收紧会整帧丢弃大房间消息），同步修正文档为 32 MiB / 20,000。
 
-6. **置顶倒计时冻结**
+6. **置顶倒计时冻结** ✅
    `RoomUiState.nowMillis` 只在消息/偏好事件到达时刷新，安静直播间"剩余 Xs"倒计时会停住。
-   建议：RoomScreen 加 1 秒 ticker（LaunchedEffect 循环更新 nowMillis）。
+   修复：`PinnedCountdownLabel` 组件内建 1 秒 ticker，独立于消息流刷新；剩余秒数改为向上取整。
 
-7. **没有版本控制与 CI**
-   工作区无 `.git`。建议 `git init` 并接入 CI（GitHub Actions 等），直接复用离线可跑的 `verifyAll` 作为 PR 门禁，产物留档。
+7. **没有版本控制与 CI** ✅
+   工作区无 `.git`。
+   修复：`git init`（初始提交 `31ea2c6`）；新增 `.github/workflows/ci.yml`（JDK 21 + Android SDK 34，CI 内生成临时签名 keystore，跑完整 `verifyAll` 并上传 APK 产物）；`.gitignore` 补全环境目录。
 
 ## P1 性能与流畅度
 
