@@ -48,3 +48,31 @@
 - GREEN：新增 coalescer 容量淘汰/过期优先清理与通知 `notify()` 固定 id 共 3 条单元测试；domain/protocol/app 单元测试全量回归通过（合计 164 项，0 失败）。
 - 变更：`git init` 初始提交 `31ea2c6`，新增 `.github/workflows/ci.yml`（JDK 21 + SDK 34 + CI 临时 keystore + `verifyAll` + APK 产物上传），`.gitignore`/`.gitattributes` 补齐。
 - 遗留风险：通知节流的真机表现（Android 13+ 隐藏通知、OEM 后台）与高流量房间 256 帧丢弃策略仍属人工门范围。
+
+## 阶段 15：P1/P2/P3 优化批次（按 optimization-plan v2 全量实施）
+
+### P1 性能与热路径
+- 删除双套消息模型：UI/Repository/ViewModel 直接消费 `core:model` 的 `LiveMessage`，删除 `AnchorModels.kt` 消息类与两份双向转换；展示文案（`displayName`/`describeMessage`）收敛为共享扩展。
+- `MessageRow` 移除 `IntrinsicSize.Min`，改用 `Box + matchParentSize` 色条（免二次测量）。
+- `SessionController` Connected 状态写入 200ms 节流 + idle 看门狗秒级 flush 兜底（保证人气等最终值收敛）；`RoomUiState.nowMillis` 死字段删除。
+- WBI keys 30 分钟 TTL 缓存；OkHttp 超时配置统一收敛到 `AppContainer`（HTTP/WS 各一份）。
+- 重要消息判定收敛为 `LiveMessage.isImportant(highlightGiftThreshold)`（置顶与提醒共用）。
+- 回归：164+ 单元测试与 `verifyAll` 全绿；`SessionControllerEdgeCasesTest` 适配节流语义。
+
+### P2 构建与工具链
+- `kotlinOptions` 全量迁移到 `compilerOptions` DSL（Kotlin/AGP/Compose BOM/targetSdk 版本号升级因离线环境受限，标记待联网执行）。
+- 签名配置可选化：`keystore.properties` 缺失不再阻断配置阶段，release 产出未签名 APK。
+- Configuration Cache 开启：5 个自定义门禁任务重构为声明 inputs 的 `VerificationTask` 子类（修 inner-class、`from(Directory)` 语义、隐式依赖三处坑）。
+- 手写 Baseline Profile（`L<类>` 类规则，规避 AGP 8.5 通配符展开 bug）。
+- 图标瘦身：`material-icons-extended` → `material-icons-core` + 6 个自绘 vector；Debug APK 17.5MB → **10.6MB**。
+- 回归：`verifyAll` 全绿，Configuration Cache 命中。
+
+### P3 产品与体验
+- 重要提醒改用 `IMPORTANCE_HIGH` 专用通知渠道（`anchor_important`），无通知权限时硬件提醒兜底。
+- 消息长按菜单：复制文本 / 拉黑用户（管道过滤即时生效）；重连"可能遗漏消息"横幅。
+- 深链 `bilibili://live/<id>`（门禁同步允许第二个 VIEW filter，且仅匹配该 scheme）；连接页输入框预填恢复。
+- 屏幕方向设置（自动/竖屏/横屏），MainActivity 实时应用。
+- 通知专用单色图标 `ic_stat_danmaku`（连接与提醒共用）。
+- Android 13+ 通知权限一次性解释引导。
+- 回归：`verifyAll` 全绿（Debug 10.6MB / Release 1.5MB，配置缓存命中，164+ 测试 0 失败）。
+- 遗留：版本号升级（Kotlin 2.x/AGP/targetSdk 35/BOM）与真机人工门（深链跳转、方向切换、渠道提醒策略、OEM 后台）待联网/真机执行。
