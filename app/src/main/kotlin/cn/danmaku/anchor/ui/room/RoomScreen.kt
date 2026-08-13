@@ -47,15 +47,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.danmaku.anchor.ConnectionPhase
 import cn.danmaku.anchor.R
+import cn.danmaku.anchor.displayName
+import cn.danmaku.anchor.model.LiveMessage
 import cn.danmaku.anchor.ui.UiTags
 import cn.danmaku.anchor.ui.components.MessageRow
+import cn.danmaku.anchor.ui.components.describeMessage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 
@@ -78,10 +83,13 @@ fun RoomScreen(
     onScrolledAway: () -> Unit,
     onRetry: () -> Unit,
     onDismissPinned: (String) -> Unit,
+    onBlockUser: (Long?, String?) -> Unit = { _, _ -> },
 ) {
     var showConfirm by remember { mutableStateOf(false) }
+    var actionMessage by remember { mutableStateOf<LiveMessage?>(null) }
     val listState = rememberLazyListState()
     val view = LocalView.current
+    val clipboard = LocalClipboardManager.current
 
     // LaunchedEffect(listState) 的闭包只捕获首帧组合时的 state 实例，后续重组不会刷新。
     // rememberUpdatedState 提供对最新值的引用，且是可跟踪的 MutableState，供 snapshotFlow 订阅。
@@ -154,6 +162,48 @@ fun RoomScreen(
             dismissButton = {
                 TextButton(onClick = { showConfirm = false }) {
                     Text("继续观看")
+                }
+            },
+        )
+    }
+
+    actionMessage?.let { message ->
+        AlertDialog(
+            onDismissRequest = { actionMessage = null },
+            title = { Text(message.displayName()) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(describeMessage(message))
+                    message.uid?.let { uid ->
+                        Text(
+                            text = "用户ID：$uid",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    clipboard.setText(AnnotatedString(describeMessage(message)))
+                    actionMessage = null
+                }) {
+                    Text("复制")
+                }
+            },
+            dismissButton = {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    TextButton(onClick = { actionMessage = null }) {
+                        Text("取消")
+                    }
+                    if (message.uid != null) {
+                        TextButton(onClick = {
+                            onBlockUser(message.uid, message.userName)
+                            actionMessage = null
+                        }) {
+                            Text("拉黑该用户")
+                        }
+                    }
                 }
             },
         )
@@ -333,6 +383,16 @@ fun RoomScreen(
                         .testTag(UiTags.RoomDiagnosticBanner),
                 )
             }
+            if (state.connectionState.phase == ConnectionPhase.Reconnecting &&
+                state.connectionState.mayHaveMissedMessages
+            ) {
+                Text(
+                    text = "连接中断，期间消息可能遗漏，重连后请留意",
+                    color = MaterialTheme.colorScheme.tertiary,
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
             Surface(
                 modifier = Modifier
                     .fillMaxSize()
@@ -347,6 +407,7 @@ fun RoomScreen(
                         MessageRow(
                             message = message,
                             fontSizeSp = state.fontSizeSp,
+                            onLongClick = { actionMessage = message },
                         )
                     }
                 }

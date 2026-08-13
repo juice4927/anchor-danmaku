@@ -20,10 +20,19 @@ data class AnchorUserPreferences(
     val highlightGiftThresholdYuan: Int = 100,
     val keywordBlacklist: List<String> = emptyList(),
     val blockedUsers: List<BlockedUser> = emptyList(),
+    val screenOrientation: Int = SCREEN_ORIENTATION_AUTO,
 ) {
     companion object {
         const val DEFAULT_FONT_SIZE = 20
         const val DEFAULT_MAX_MESSAGES = 300
+        const val SCREEN_ORIENTATION_AUTO = 0
+        const val SCREEN_ORIENTATION_PORTRAIT = 1
+        const val SCREEN_ORIENTATION_LANDSCAPE = 2
+        val SCREEN_ORIENTATION_OPTIONS = listOf(
+            SCREEN_ORIENTATION_AUTO,
+            SCREEN_ORIENTATION_PORTRAIT,
+            SCREEN_ORIENTATION_LANDSCAPE,
+        )
         val FONT_SIZE_OPTIONS = (16..32 step 2).toList()
         val MAX_MESSAGES_OPTIONS = listOf(100, 300, 500)
         val MIN_GIFT_OPTIONS = listOf(0, 1, 10, 50)

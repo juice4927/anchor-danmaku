@@ -26,11 +26,13 @@ data class ConnectRequest(
 class ConnectViewModel(
     preferencesRepository: PreferencesStore,
     sessionRepository: SessionCoordinator,
+    initialRoomId: Long? = null,
 ) : ViewModel() {
     private val initialPreferences = preferencesRepository.preferences.value
     private val state = MutableStateFlow(
         ConnectUiState(
-            roomInput = initialPreferences.recentRooms.firstOrNull()?.toString().orEmpty(),
+            roomInput = initialRoomId?.toString()
+                ?: initialPreferences.recentRooms.firstOrNull()?.toString().orEmpty(),
             recentRooms = initialPreferences.recentRooms,
             demoAvailable = sessionRepository.demoAvailable,
             demoLabel = sessionRepository.demoEntryLabel,

@@ -1,7 +1,9 @@
 package cn.danmaku.anchor.ui.components
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,10 +26,12 @@ import androidx.compose.ui.unit.sp
 import cn.danmaku.anchor.displayName
 import cn.danmaku.anchor.model.LiveMessage
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageRow(
     message: LiveMessage,
     fontSizeSp: Int,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val accent = when (message) {
         is LiveMessage.SuperChatMessage -> Color(0xFFFFC857)
@@ -42,7 +46,18 @@ fun MessageRow(
         is LiveMessage.DanmakuMessage -> "弹幕"
     }
     Surface(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (onLongClick != null) {
+                    Modifier.combinedClickable(
+                        onClick = {},
+                        onLongClick = onLongClick,
+                    )
+                } else {
+                    Modifier
+                },
+            ),
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surface,
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
@@ -114,7 +129,8 @@ fun MessageRow(
 
 fun LiveMessage.displayName(): String = userName?.takeIf { it.isNotBlank() } ?: "匿名用户"
 
-private fun describeMessage(message: LiveMessage): String = when (message) {
+/** 消息展示文案（长按菜单等 UI 复用）。 */
+internal fun describeMessage(message: LiveMessage): String = when (message) {
     is LiveMessage.DanmakuMessage -> message.text + if (message.repeatCount > 1) " ×${message.repeatCount}" else ""
     is LiveMessage.SuperChatMessage -> "¥${message.priceCny.toDisplayString()} · ${message.message}"
     is LiveMessage.GiftMessage -> {

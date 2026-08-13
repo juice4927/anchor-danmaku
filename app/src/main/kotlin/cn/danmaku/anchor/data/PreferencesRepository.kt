@@ -37,6 +37,7 @@ interface PreferencesStore {
     suspend fun addBlockedUser(uid: Long, userName: String)
     suspend fun removeBlockedUser(uid: Long)
     suspend fun clearBlockedUsers()
+    suspend fun updateScreenOrientation(value: Int)
 }
 
 class PreferencesRepository(
@@ -150,6 +151,10 @@ class PreferencesRepository(
         store.edit { it.remove(BLOCKED_USERS) }
     }
 
+    override suspend fun updateScreenOrientation(value: Int) {
+        store.edit { it[SCREEN_ORIENTATION] = normalizeScreenOrientation(value) }
+    }
+
     private fun decode(prefs: Preferences): AnchorUserPreferences {
         val minGift = normalizeMinGift(prefs[MIN_GIFT] ?: 0)
         return AnchorUserPreferences(
@@ -166,6 +171,9 @@ class PreferencesRepository(
             ),
             keywordBlacklist = decodeKeywords(prefs[KEYWORDS]).takeLast(50),
             blockedUsers = decodeBlockedUsers(prefs[BLOCKED_USERS]).takeLast(200),
+            screenOrientation = normalizeScreenOrientation(
+                prefs[SCREEN_ORIENTATION] ?: AnchorUserPreferences.SCREEN_ORIENTATION_AUTO,
+            ),
         )
     }
 
@@ -187,6 +195,10 @@ class PreferencesRepository(
         ) ?: 100
         return candidate.coerceAtLeast(minGift)
     }
+
+    private fun normalizeScreenOrientation(value: Int): Int =
+        if (value in AnchorUserPreferences.SCREEN_ORIENTATION_OPTIONS) value
+        else AnchorUserPreferences.SCREEN_ORIENTATION_AUTO
 
     private fun normalizeKeyword(value: String): String? =
         value.trim().takeIf { it.length in 1..32 }
@@ -240,5 +252,6 @@ class PreferencesRepository(
         val HIGHLIGHT_GIFT = intPreferencesKey("highlight_gift")
         val KEYWORDS = stringPreferencesKey("keywords")
         val BLOCKED_USERS = stringPreferencesKey("blocked_users")
+        val SCREEN_ORIENTATION = intPreferencesKey("screen_orientation")
     }
 }

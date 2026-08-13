@@ -190,7 +190,7 @@ fun ConnectScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "最近房间",
+                        text = "继续连接",
                         style = MaterialTheme.typography.titleMedium,
                     )
                 }

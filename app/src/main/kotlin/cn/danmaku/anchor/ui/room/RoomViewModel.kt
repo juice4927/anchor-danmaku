@@ -47,7 +47,7 @@ data class RoomUiState(
 
 class RoomViewModel(
     sessionRepository: SessionCoordinator,
-    preferencesRepository: PreferencesStore,
+    private val preferencesRepository: PreferencesStore,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     private val state = MutableStateFlow(RoomUiState())
@@ -125,6 +125,13 @@ class RoomViewModel(
                 messagePipeline.snapshot()
             }
             applyPipelineState(pipelineState)
+        }
+    }
+
+    fun blockUser(uid: Long?, userName: String?) {
+        val id = uid ?: return
+        viewModelScope.launch {
+            preferencesRepository.addBlockedUser(id, userName.orEmpty())
         }
     }
 

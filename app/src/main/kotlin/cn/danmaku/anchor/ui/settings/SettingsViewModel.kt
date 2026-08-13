@@ -42,6 +42,7 @@ class SettingsViewModel(
     fun clearBlockedUsers() = launch { preferencesRepository.clearBlockedUsers() }
     fun removeRecentRoom(roomId: Long) = launch { preferencesRepository.removeRecentRoom(roomId) }
     fun clearRecentRooms() = launch { preferencesRepository.clearRecentRooms() }
+    fun updateScreenOrientation(value: Int) = launch { preferencesRepository.updateScreenOrientation(value) }
 
     private fun launch(block: suspend () -> Unit) {
         viewModelScope.launch { block() }

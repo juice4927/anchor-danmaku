@@ -68,6 +68,10 @@ class FakePreferencesStore(
     override suspend fun clearBlockedUsers() {
         state.value = state.value.copy(blockedUsers = emptyList())
     }
+
+    override suspend fun updateScreenOrientation(value: Int) {
+        state.value = state.value.copy(screenOrientation = value)
+    }
 }
 
 class FakeSessionCoordinator(

@@ -58,6 +58,7 @@ fun SettingsScreen(
     onClearBlockedUsers: () -> Unit,
     onRemoveRecentRoom: (Long) -> Unit,
     onClearRecentRooms: () -> Unit,
+    onScreenOrientationChanged: (Int) -> Unit = {},
 ) {
     var keywordInput by rememberSaveable { mutableStateOf("") }
     Scaffold(
@@ -149,6 +150,16 @@ fun SettingsScreen(
                     ToggleRow("保持屏幕常亮", state.preferences.keepScreenOn, onKeepScreenOnChanged)
                     ToggleRow("提示音", state.preferences.soundEnabled, onSoundChanged)
                     ToggleRow("震动", state.preferences.vibrationEnabled, onVibrationChanged)
+                }
+            }
+            item {
+                SettingSection(title = "屏幕方向") {
+                    OptionRow(
+                        values = AnchorUserPreferences.SCREEN_ORIENTATION_OPTIONS,
+                        selected = state.preferences.screenOrientation,
+                        label = { orientationLabel(it) },
+                        onClick = onScreenOrientationChanged,
+                    )
                 }
             }
             item {
@@ -259,6 +270,13 @@ private fun SettingSection(
             content()
         }
     }
+}
+
+private fun orientationLabel(value: Int): String = when (value) {
+    AnchorUserPreferences.SCREEN_ORIENTATION_AUTO -> "自动"
+    AnchorUserPreferences.SCREEN_ORIENTATION_PORTRAIT -> "竖屏"
+    AnchorUserPreferences.SCREEN_ORIENTATION_LANDSCAPE -> "横屏"
+    else -> "自动"
 }
 
 @Composable

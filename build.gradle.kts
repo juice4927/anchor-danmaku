@@ -287,16 +287,35 @@ abstract class PermissionAllowlistCheck : VerificationTask() {
         val filters = (0 until mainActivity.childNodes.length)
             .map { mainActivity.childNodes.item(it) }
             .filter { it.nodeName == "intent-filter" }
-        requireGate(filters.size == 1) { "MainActivity must have exactly one intent-filter" }
-        val filterNames = filters.single().childNodes.let { children ->
-            (0 until children.length)
-                .map { children.item(it) }
-                .filter { it.nodeName == "action" || it.nodeName == "category" }
-                .mapNotNull { it.attributes.getNamedItemNS(androidNamespace, "name")?.nodeValue }
-                .toSet()
+        requireGate(filters.size == 2) { "MainActivity must have exactly two intent-filters" }
+        val filterNames = filters.map { filter ->
+            filter.childNodes.let { children ->
+                (0 until children.length)
+                    .map { children.item(it) }
+                    .filter { it.nodeName == "action" || it.nodeName == "category" }
+                    .mapNotNull { it.attributes.getNamedItemNS(androidNamespace, "name")?.nodeValue }
+                    .toSet()
+            }
         }
-        requireGate(filterNames == setOf("android.intent.action.MAIN", "android.intent.category.LAUNCHER")) {
-            "MainActivity must expose only MAIN/LAUNCHER: $filterNames"
+        requireGate(filterNames.contains(setOf("android.intent.action.MAIN", "android.intent.category.LAUNCHER"))) {
+            "MainActivity must expose MAIN/LAUNCHER: $filterNames"
+        }
+        val viewFilters = filters.filter { filter ->
+            (0 until filter.childNodes.length)
+                .map { filter.childNodes.item(it) }
+                .any { it.nodeName == "action" && it.attributes.getNamedItemNS(androidNamespace, "name")?.nodeValue == "android.intent.action.VIEW" }
+        }
+        requireGate(viewFilters.size == 1) { "MainActivity must expose exactly one VIEW intent-filter" }
+        val dataNodes = (0 until viewFilters.single().childNodes.length)
+            .map { viewFilters.single().childNodes.item(it) }
+            .filter { it.nodeName == "data" }
+        val dataValues = dataNodes.mapNotNull { data ->
+            val scheme = data.attributes.getNamedItemNS(androidNamespace, "scheme")?.nodeValue
+            val host = data.attributes.getNamedItemNS(androidNamespace, "host")?.nodeValue
+            if (scheme != null) "$scheme://$host" else null
+        }
+        requireGate(dataValues == listOf("bilibili://live")) {
+            "MainActivity VIEW filter must only match bilibili://live: $dataValues"
         }
         logger.lifecycle("permissionAllowlistCheck PASS: ${permissions.size} allowed permissions")
     }

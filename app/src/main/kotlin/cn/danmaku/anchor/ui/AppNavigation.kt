@@ -1,8 +1,18 @@
 package cn.danmaku.anchor.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -28,12 +38,57 @@ fun AppNavigation(
     onRetryRequest: () -> Unit,
     onStopRequest: () -> Unit,
     navController: NavHostController = rememberNavController(),
+    initialRoomId: Long? = null,
 ) {
+    val context = LocalContext.current
+    var showPermissionRationale by remember { mutableStateOf(false) }
+    var rationaleShownThisSession by remember { mutableStateOf(false) }
+    var pendingConnect by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
+
+    fun requestConnect(roomId: Long, useDemo: Boolean) {
+        val needsRationale = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS,
+            ) != PackageManager.PERMISSION_GRANTED &&
+            !rationaleShownThisSession
+        if (needsRationale) {
+            rationaleShownThisSession = true
+            pendingConnect = { confirmedUseDemo -> onConnectRequest(roomId, confirmedUseDemo) }
+            showPermissionRationale = true
+        } else {
+            onConnectRequest(roomId, useDemo)
+        }
+    }
+
+    if (showPermissionRationale) {
+        AlertDialog(
+            onDismissRequest = { showPermissionRationale = false },
+            title = { Text("通知权限说明") },
+            text = { Text("连接状态与重要消息提醒（醒目留言、上舰、高额礼物）通过通知展示。拒绝后仍可连接，但提醒将不可用。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showPermissionRationale = false
+                    pendingConnect?.invoke(false)
+                    pendingConnect = null
+                }) {
+                    Text("继续")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionRationale = false }) {
+                    Text("暂不")
+                }
+            },
+        )
+    }
+
     val connectViewModel: ConnectViewModel = viewModel(
         factory = container.factory {
             ConnectViewModel(
                 preferencesRepository = container.preferencesRepository,
                 sessionRepository = container.sessionRepository,
+                initialRoomId = initialRoomId,
             )
         },
     )
@@ -65,7 +120,7 @@ fun AppNavigation(
                 },
                 onEnterRoom = { useDemo ->
                     connectViewModel.buildConnectRequest(useDemo)?.let { request ->
-                        onConnectRequest(request.roomId, request.useDemo)
+                        requestConnect(request.roomId, request.useDemo)
                         navController.navigate(Routes.Room)
                     }
                 },
@@ -88,6 +143,7 @@ fun AppNavigation(
                 onScrolledAway = roomViewModel::onAutoFollowDisabled,
                 onRetry = onRetryRequest,
                 onDismissPinned = roomViewModel::dismissPinned,
+                onBlockUser = roomViewModel::blockUser,
             )
         }
         composable(Routes.Settings) {
@@ -109,6 +165,7 @@ fun AppNavigation(
                 onClearBlockedUsers = settingsViewModel::clearBlockedUsers,
                 onRemoveRecentRoom = settingsViewModel::removeRecentRoom,
                 onClearRecentRooms = settingsViewModel::clearRecentRooms,
+                onScreenOrientationChanged = settingsViewModel::updateScreenOrientation,
             )
         }
         composable(Routes.About) {

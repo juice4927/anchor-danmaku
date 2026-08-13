@@ -33,7 +33,7 @@ class NotificationController(
 
     fun build(state: AnchorConnectionState): Notification =
         NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_stat_danmaku)
             .setContentTitle("主播弹幕台")
             .setContentText(buildContentText(state))
             .setContentIntent(mainPendingIntent())
