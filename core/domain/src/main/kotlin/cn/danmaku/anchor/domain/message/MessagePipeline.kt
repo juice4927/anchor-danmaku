@@ -103,6 +103,19 @@ class MessagePipeline(
         pinnedMessagePolicy.clear()
     }
 
+    /**
+     * 切换到新直播间时重置整个会话：清空可见消息与置顶，同时把累计接收计数归零。
+     * 与 [clear]（仅清可见消息、保留累计计数，供"清屏"按钮）不同——换房间代表全新会话。
+     */
+    suspend fun resetForNewRoom() {
+        visibleEntries.clear()
+        skippedCount = 0
+        newMessagesCount = 0
+        receivedCount = 0
+        priorityEventBuffer.clear()
+        pinnedMessagePolicy.clear()
+    }
+
     fun snapshot(): MessagePipelineState = snapshot(pinnedMessagePolicy.snapshot())
 
     private fun snapshot(pinnedMessages: List<PinnedMessage>): MessagePipelineState = MessagePipelineState(

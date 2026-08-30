@@ -56,6 +56,11 @@ class RoomViewModel(
 
     val uiState: StateFlow<RoomUiState> = state.asStateFlow()
 
+    // RoomViewModel 以 Activity 作用域创建（AppNavigation 中 viewModel() 声明于 NavHost 外），
+    // 跨导航条目复用。MessagePipeline 是进程内内存态，若连接目标房间变化而不清空，
+    // 切换房间后上一房间的弹幕会残留。这里跟随连接状态里的房间号，变化即重置消息流水线。
+    private var activeRoomId: Long? = null
+
     init {
         viewModelScope.launch {
             preferencesRepository.preferences.collect { preferences ->
@@ -68,6 +73,11 @@ class RoomViewModel(
         }
         viewModelScope.launch {
             sessionRepository.state.collect { sessionState ->
+                val roomId = sessionState.roomId
+                if (roomId != null && roomId != activeRoomId) {
+                    activeRoomId = roomId
+                    resetPipelineOnRoomSwitch()
+                }
                 state.update { it.copy(connectionState = sessionState) }
             }
         }
@@ -79,6 +89,14 @@ class RoomViewModel(
                 applyPipelineState(result.state)
             }
         }
+    }
+
+    private suspend fun resetPipelineOnRoomSwitch() {
+        val pipelineState = pipelineMutex.withLock {
+            messagePipeline.resetForNewRoom()
+            messagePipeline.snapshot()
+        }
+        applyPipelineState(pipelineState)
     }
 
     fun togglePause() {

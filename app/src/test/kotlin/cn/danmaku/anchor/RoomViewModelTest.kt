@@ -149,4 +149,40 @@ class RoomViewModelTest {
         assertTrue(viewModel.uiState.value.autoFollow)
         assertEquals(0, viewModel.uiState.value.newMessageCount)
     }
+
+    @Test
+    fun switchingRoomClearsPreviousMessages() = runTest {
+        val session = FakeSessionCoordinator(
+            initialState = AnchorConnectionState(phase = ConnectionPhase.Connected, roomId = 987654L),
+        )
+        val viewModel = RoomViewModel(session, FakePreferencesStore(AnchorUserPreferences(maxMessages = 100)), mainDispatcherRule.dispatcher)
+        advanceUntilIdle()
+
+        // 房间 A 收到弹幕
+        session.emitMessage(
+            LiveMessage.DanmakuMessage(
+                id = "a1",
+                roomId = 987654L,
+                uid = 10001L,
+                userName = "观众A",
+                serverTimestampMillis = 1L,
+                receivedAtMillis = 1L,
+                text = "房间A的弹幕",
+                medalName = null,
+                medalLevel = null,
+            ),
+        )
+        advanceUntilIdle()
+        assertEquals(1, viewModel.uiState.value.messages.size)
+
+        // 切换到房间 B（房间号变化）
+        session.emitState(AnchorConnectionState(phase = ConnectionPhase.Connected, roomId = 11111L))
+        advanceUntilIdle()
+
+        // 旧房间弹幕应被清空
+        assertTrue(viewModel.uiState.value.messages.isEmpty())
+        assertEquals(0, viewModel.uiState.value.receivedCount)
+        assertEquals(ConnectionPhase.Connected, viewModel.uiState.value.connectionState.phase)
+        assertEquals(11111L, viewModel.uiState.value.connectionState.roomId)
+    }
 }
