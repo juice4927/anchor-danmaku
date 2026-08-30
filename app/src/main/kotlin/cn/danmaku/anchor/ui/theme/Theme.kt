@@ -8,37 +8,57 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 
-private val AnchorColors = darkColorScheme(
-    primary = Color(0xFF8B7CFF),
-    onPrimary = Color(0xFF17102E),
-    primaryContainer = Color(0xFF2B2158),
-    onPrimaryContainer = Color(0xFFE5E0FF),
-    secondary = Color(0xFFA78BFA),
-    onSecondary = Color(0xFF1B1236),
-    secondaryContainer = Color(0xFF33235E),
-    onSecondaryContainer = Color(0xFFE9E0FF),
-    tertiary = Color(0xFFFB7299),
+/**
+ * Bilibili 深色主题配色。
+ * 主色取自 B 站品牌粉 #FB7299，辅助色取经典链接蓝 #00A1D6，
+ * 背景/卡片/文本沿用 B 站深色模式的 #18191C / #232428 / #F2F3F5 体系。
+ */
+/** B 站品牌粉。 */
+val BiliPink = Color(0xFFFB7299)
+
+/** B 站品牌浅粉，用于渐变起点。 */
+val BiliPinkLight = Color(0xFFFF9BB2)
+
+/** B 站经典链接蓝。 */
+val BiliBlue = Color(0xFF00A1D6)
+
+/** SC 醒目留言金色。 */
+val BiliGold = Color(0xFFFFC857)
+
+/** 礼物金色。 */
+val BiliGiftGold = Color(0xFFFFD24D)
+
+private val BiliDarkColors = darkColorScheme(
+    primary = Color(0xFFFB7299),
+    onPrimary = Color(0xFFFFFFFF),
+    primaryContainer = Color(0xFF3A1D29),
+    onPrimaryContainer = Color(0xFFFFD9E4),
+    secondary = Color(0xFF00A1D6),
+    onSecondary = Color(0xFFFFFFFF),
+    secondaryContainer = Color(0xFF102C36),
+    onSecondaryContainer = Color(0xFFBFE9F7),
+    tertiary = Color(0xFFFF9BB2),
     onTertiary = Color(0xFF3A0A1C),
-    tertiaryContainer = Color(0xFF4A1630),
+    tertiaryContainer = Color(0xFF3A2029),
     onTertiaryContainer = Color(0xFFFFD9E4),
-    background = Color(0xFF0B0D17),
-    onBackground = Color(0xFFE8EBF5),
-    surface = Color(0xFF121624),
-    onSurface = Color(0xFFE8EBF5),
-    surfaceVariant = Color(0xFF1C2134),
-    onSurfaceVariant = Color(0xFFA8AFC4),
-    outline = Color(0xFF2E3550),
-    outlineVariant = Color(0xFF232A42),
+    background = Color(0xFF0F1216),
+    onBackground = Color(0xFFF2F3F5),
+    surface = Color(0xFF171B21),
+    onSurface = Color(0xFFF2F3F5),
+    surfaceVariant = Color(0xFF1D2229),
+    onSurfaceVariant = Color(0xFFC9CCD0),
+    outline = Color(0xFF3A424C),
+    outlineVariant = Color(0xFF293039),
     error = Color(0xFFFF6B81),
     onError = Color(0xFF3D0712),
 )
 
-private val AnchorShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(16.dp),
-    large = RoundedCornerShape(22.dp),
-    extraLarge = RoundedCornerShape(28.dp),
+private val BiliShapes = Shapes(
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(6.dp),
+    medium = RoundedCornerShape(8.dp),
+    large = RoundedCornerShape(10.dp),
+    extraLarge = RoundedCornerShape(12.dp),
 )
 
 @Composable
@@ -46,9 +66,9 @@ fun AnchorTheme(
     content: @Composable () -> Unit,
 ) {
     MaterialTheme(
-        colorScheme = AnchorColors,
+        colorScheme = BiliDarkColors,
         typography = AnchorTypography,
-        shapes = AnchorShapes,
+        shapes = BiliShapes,
         content = content,
     )
 }

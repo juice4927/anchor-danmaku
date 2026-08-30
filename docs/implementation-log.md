@@ -76,3 +76,18 @@
 - Android 13+ 通知权限一次性解释引导。
 - 回归：`verifyAll` 全绿（Debug 10.6MB / Release 1.5MB，配置缓存命中，164+ 测试 0 失败）。
 - 遗留：版本号升级（Kotlin 2.x/AGP/targetSdk 35/BOM）与真机人工门（深链跳转、方向切换、渠道提醒策略、OEM 后台）待联网/真机执行。
+
+## 阶段 16：B 站品牌视觉改版入库
+
+### 改动内容
+- 主题换为 B 站品牌色系：主色粉 `#FB7299`、辅助蓝 `#00A1D6`、SC 金/礼物金强调色，背景/文本沿用 B 站深色体系；圆角与排版整体收紧（`Theme.kt`/`Type.kt`/`colors.xml`）。
+- 四页重排：连接页拆分 `PageIntro`/`BrandHeader`/`ConnectCard`/`RecentRoomsPanel` 等并支持宽窄自适应 + 滚动；房间页拆出 `RoomStatusStrip`/`ConsoleToolbar`/`FocusRail`（重要事件聚焦栏）；设置页改侧栏 + 分段面板（`SettingsSidebar`/`SettingsTabStrip`）；消息行按类型着色加标签（SC/舰队/礼物/弹幕）。
+- 新启动图标：自适应前景/背景重绘，新增 Android 13+ 单色层 `ic_launcher_monochrome` 与 `mipmap-anydpi-v33/ic_launcher.xml`，Manifest 补 `roundIcon`。
+- 行为微调：`AppNavigation` 退出确认回调改为捕获当时的 `useDemo`（演示请求确认后仍走演示，原先硬编码 false）；房间长按动作回调上提；androidTest 断言 "舰队"→"加入或续费舰队"。
+- ProGuard 增加 Lifecycle 2.8 反射读取 Compose 1.6 `LocalLifecycleOwner` 的 keep。
+
+### 回归与环境（重要变更）
+- 本批验证时旧构建配方失效：测试执行器全部报 `ClassNotFoundException: GradleWorkerMain`。实验定界为字符集问题——Temurin 17.0.20 的 java 启动器按系统 ANSI 代码页（GBK）解码 `@argfile`，而 Gradle 写 worker classpath argfile 固定 UTF-8，argfile 内中文路径必乱码；与沙箱、TMP=/tmp 均无关（UTF-8 argfile 复现、GBK argfile 通过的对照实验）。
+- 新配方：仓库克隆到纯 ASCII 路径 `C:\anchor-build`（用 E 盘工作树覆盖改动文件与 fixtures 原字节），`GRADLE_USER_HOME=C:\anchor-gradle-user`（junction 指回 `.gradle-user` 缓存，免重下载依赖），`LOCALAPPDATA` 重定向到克隆内，`TMP`/`TEMP` 显式 Windows 路径。E 盘原路径无法直接修复（系统 ACP 不可按进程覆盖）。
+- 新克隆在 `core.autocrlf` + `* text=auto` 下 checkout 会把 fixtures 换行改写为 CRLF，导致 `protocolFixtureCheck` SHA-256 失配；已用原字节覆盖并在 `.gitattributes` 增加 `fixtures/** -text` 根治。
+- `verifyAll` 全绿：protocolFixtureCheck 20 项、权限门 6 项、12,000 事件烟测、APK 尺寸门、Configuration Cache 命中；Debug 10,649,248 bytes（SHA-256 `045c0fa1…`）、unsigned Release 1,561,043 bytes（`28ab8c37…`）。

@@ -105,7 +105,7 @@ class AppUiSemanticsTest {
         composeRule.onNodeWithText("弹幕").assertExists()
         composeRule.onNodeWithText("SC").assertExists()
         composeRule.onNodeWithText("礼物").assertExists()
-        composeRule.onNodeWithText("舰队").assertExists()
+        composeRule.onNodeWithText("加入或续费舰队").assertExists()
         composeRule.onNodeWithText("重连中", substring = true).assertExists()
         composeRule.onNodeWithText("15s 后重试", substring = true).assertExists()
     }

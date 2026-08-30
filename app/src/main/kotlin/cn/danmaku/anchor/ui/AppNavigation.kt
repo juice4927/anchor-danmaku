@@ -43,7 +43,7 @@ fun AppNavigation(
     val context = LocalContext.current
     var showPermissionRationale by remember { mutableStateOf(false) }
     var rationaleShownThisSession by remember { mutableStateOf(false) }
-    var pendingConnect by remember { mutableStateOf<((Boolean) -> Unit)?>(null) }
+    var pendingConnect by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     fun requestConnect(roomId: Long, useDemo: Boolean) {
         val needsRationale = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -54,7 +54,7 @@ fun AppNavigation(
             !rationaleShownThisSession
         if (needsRationale) {
             rationaleShownThisSession = true
-            pendingConnect = { confirmedUseDemo -> onConnectRequest(roomId, confirmedUseDemo) }
+            pendingConnect = { onConnectRequest(roomId, useDemo) }
             showPermissionRationale = true
         } else {
             onConnectRequest(roomId, useDemo)
@@ -69,7 +69,7 @@ fun AppNavigation(
             confirmButton = {
                 TextButton(onClick = {
                     showPermissionRationale = false
-                    pendingConnect?.invoke(false)
+                    pendingConnect?.invoke()
                     pendingConnect = null
                 }) {
                     Text("继续")

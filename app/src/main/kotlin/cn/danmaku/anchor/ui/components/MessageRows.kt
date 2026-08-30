@@ -2,7 +2,6 @@ package cn.danmaku.anchor.ui.components
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -10,7 +9,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -19,12 +17,67 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import cn.danmaku.anchor.displayName
 import cn.danmaku.anchor.model.LiveMessage
+import cn.danmaku.anchor.ui.theme.BiliBlue
+import cn.danmaku.anchor.ui.theme.BiliGiftGold
+import cn.danmaku.anchor.ui.theme.BiliGold
+import cn.danmaku.anchor.ui.theme.BiliPink
+
+/** 消息类型对应的 B 站风格强调色：弹幕粉、SC 金、舰队蓝、礼物金。 */
+private val messageAccent: (LiveMessage) -> Color = { message ->
+    when (message) {
+        is LiveMessage.SuperChatMessage -> BiliGold
+        is LiveMessage.GuardMessage -> BiliBlue
+        is LiveMessage.GiftMessage -> BiliGiftGold
+        is LiveMessage.DanmakuMessage -> BiliPink
+    }
+}
+
+private val messageLabel: (LiveMessage) -> String = { message ->
+    when (message) {
+        is LiveMessage.SuperChatMessage -> "SC"
+        is LiveMessage.GuardMessage -> "舰队"
+        is LiveMessage.GiftMessage -> "礼物"
+        is LiveMessage.DanmakuMessage -> "弹幕"
+    }
+}
+
+private fun messageMeta(message: LiveMessage): String? = when (message) {
+    is LiveMessage.DanmakuMessage -> buildString {
+        message.medalLevel?.let { append(it) }
+        message.medalName?.takeIf { it.isNotBlank() }?.let {
+            if (isNotEmpty()) append(" ")
+            append(it)
+        }
+        if (message.repeatCount > 1) {
+            if (isNotEmpty()) append(" · ")
+            append("合并 ${message.repeatCount} 条")
+        }
+    }.ifBlank { null }
+    is LiveMessage.SuperChatMessage -> "¥${message.priceCny.toDisplayString()}"
+    is LiveMessage.GiftMessage -> buildString {
+        append(message.giftName)
+        append(" ×")
+        append(message.count)
+        message.estimatedCny?.let {
+            append(" · 约¥")
+            append(it.toDisplayString())
+        }
+    }
+    is LiveMessage.GuardMessage -> "等级 ${message.guardLevel} ×${message.count}"
+}
+
+private fun messageBody(message: LiveMessage): String = when (message) {
+    is LiveMessage.DanmakuMessage -> message.text
+    is LiveMessage.SuperChatMessage -> message.message
+    is LiveMessage.GiftMessage -> describeMessage(message)
+    is LiveMessage.GuardMessage -> "加入或续费舰队"
+}
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -33,18 +86,9 @@ fun MessageRow(
     fontSizeSp: Int,
     onLongClick: (() -> Unit)? = null,
 ) {
-    val accent = when (message) {
-        is LiveMessage.SuperChatMessage -> Color(0xFFFFC857)
-        is LiveMessage.GuardMessage -> Color(0xFFA78BFA)
-        is LiveMessage.GiftMessage -> Color(0xFF4DD0E1)
-        is LiveMessage.DanmakuMessage -> MaterialTheme.colorScheme.tertiary
-    }
-    val label = when (message) {
-        is LiveMessage.SuperChatMessage -> "SC"
-        is LiveMessage.GuardMessage -> "舰队"
-        is LiveMessage.GiftMessage -> "礼物"
-        is LiveMessage.DanmakuMessage -> "弹幕"
-    }
+    val accent = messageAccent(message)
+    val label = messageLabel(message)
+    val meta = messageMeta(message)
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -58,67 +102,74 @@ fun MessageRow(
                     Modifier
                 },
             ),
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surface,
+        shape = RoundedCornerShape(10.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.38f),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        // 高流量滚动下避免 IntrinsicSize 的二次测量：Box 以内容（Column）定高，
-        // 色条用 matchParentSize 跟随，无需额外测量 pass。
-        Box(modifier = Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .width(4.dp)
-                    .background(accent),
-            )
+        // 直接在内容层绘制色条，避免 matchParentSize 将窄条扩成整行背景。
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawBehind {
+                    val inset = 8.dp.toPx()
+                    drawRoundRect(
+                        color = accent,
+                        topLeft = androidx.compose.ui.geometry.Offset(0f, inset),
+                        size = androidx.compose.ui.geometry.Size(
+                            width = 3.5.dp.toPx(),
+                            height = (size.height - inset * 2).coerceAtLeast(0f),
+                        ),
+                        cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()),
+                    )
+                },
+        ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 12.dp, top = 10.dp, bottom = 10.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
+                    .padding(start = 14.dp, end = 12.dp, top = 9.dp, bottom = 9.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    Text(
+                        text = message.displayName(),
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f),
+                    )
+                    meta?.let {
+                        Text(
+                            text = it,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
                     Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = accent.copy(alpha = 0.16f),
+                        shape = RoundedCornerShape(5.dp),
+                        color = Color.Transparent,
+                        border = BorderStroke(1.dp, accent.copy(alpha = 0.36f)),
                     ) {
                         Text(
                             text = label,
                             style = MaterialTheme.typography.labelSmall,
                             color = accent,
                             fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                        )
-                    }
-                    Text(
-                        text = message.displayName(),
-                        style = MaterialTheme.typography.bodyMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    if (message is LiveMessage.DanmakuMessage && message.medalName != null) {
-                        Text(
-                            text = buildString {
-                                message.medalLevel?.let { append(it) }
-                                append(" ")
-                                append(message.medalName)
-                            },
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.tertiary,
-                            maxLines = 1,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                         )
                     }
                 }
                 Text(
-                    text = describeMessage(message),
+                    text = messageBody(message),
                     fontSize = fontSizeSp.sp,
-                    lineHeight = (fontSizeSp + 8).sp,
-                    maxLines = 4,
+                    lineHeight = (fontSizeSp + 7).sp,
+                    maxLines = 3,
                     overflow = TextOverflow.Ellipsis,
                     color = MaterialTheme.colorScheme.onSurface,
                 )
