@@ -1,6 +1,7 @@
 package cn.danmaku.anchor.protocol.bili
 
 import com.google.common.truth.Truth.assertThat
+import cn.danmaku.anchor.model.LiveStatus
 import kotlinx.serialization.decodeFromString
 import okhttp3.OkHttpClient
 import okhttp3.mockwebserver.Dispatcher
@@ -294,6 +295,86 @@ class BiliRoomApiNet01ToNet06Test {
             val missingField = runCatching { roomApi(server, fingerprintInjected = false).getDanmuInfo(987654L) }.exceptionOrNull()
             assertThat(missingField).isInstanceOf(UnknownRecoverableFailure::class.java)
             assertThat(missingField).hasMessageThat().contains("buvid4")
+        }
+    }
+
+    @Test
+    fun net12_getRoomMetadataResolvesOwnerNameAndLiveStatus() = runBlockingTest {
+        withServer { server ->
+            var capturedPaths = mutableListOf<String>()
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    val path = request.path ?: return MockResponse().setResponseCode(404)
+                    capturedPaths += path
+                    return when {
+                        path.startsWith("/room/v1/Room/get_info") ->
+                            MockResponse()
+                                .setResponseCode(200)
+                                .setHeader("Content-Type", "application/json")
+                                .setBody(
+                                    """
+                                    {"code":0,"message":"OK","data":{
+                                      "room_id":23058,"uid":11153765,"live_status":1,"title":"哔哩哔哩音悦台"
+                                    }}
+                                    """.trimIndent(),
+                                )
+
+                        path.startsWith("/live_user/v1/Master/info") ->
+                            MockResponse()
+                                .setResponseCode(200)
+                                .setHeader("Content-Type", "application/json")
+                                .setBody(
+                                    """
+                                    {"code":0,"data":{"info":{
+                                      "uid":11153765,"uname":"某主播","face":"https://example.com/face.jpg"
+                                    }}}
+                                    """.trimIndent(),
+                                )
+
+                        else -> MockResponse().setResponseCode(404)
+                    }
+                }
+            }
+            val api = roomApi(server)
+            val meta = api.getRoomMetadata(23058L)
+            assertThat(meta.roomId).isEqualTo(23058L)
+            assertThat(meta.ownerName).isEqualTo("某主播")
+            assertThat(meta.liveStatus).isEqualTo(LiveStatus.LIVE)
+            val getInfoPath = capturedPaths.first { it.startsWith("/room/v1/Room/get_info") }
+            assertThat(getInfoPath).contains("room_id=23058")
+        }
+    }
+
+    @Test
+    fun net13_getRoomMetadataDegradesWhenMasterInfoUnavailable() = runBlockingTest {
+        withServer { server ->
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    val path = request.path ?: return MockResponse().setResponseCode(404)
+                    return when {
+                        path.startsWith("/room/v1/Room/get_info") ->
+                            MockResponse()
+                                .setResponseCode(200)
+                                .setHeader("Content-Type", "application/json")
+                                .setBody(
+                                    """
+                                    {"code":0,"message":"OK","data":{
+                                      "room_id":23058,"uid":11153765,"live_status":0,"title":"哔哩哔哩音悦台"
+                                    }}
+                                    """.trimIndent(),
+                                )
+
+                        path.startsWith("/live_user/v1/Master/info") -> MockResponse().setResponseCode(500)
+
+                        else -> MockResponse().setResponseCode(404)
+                    }
+                }
+            }
+            val api = roomApi(server)
+            val meta = api.getRoomMetadata(23058L)
+            assertThat(meta.roomId).isEqualTo(23058L)
+            assertThat(meta.ownerName).isNull()
+            assertThat(meta.liveStatus).isEqualTo(LiveStatus.NOT_LIVE)
         }
     }
 

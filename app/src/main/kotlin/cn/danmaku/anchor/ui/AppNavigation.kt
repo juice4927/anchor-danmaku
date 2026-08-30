@@ -88,6 +88,7 @@ fun AppNavigation(
             ConnectViewModel(
                 preferencesRepository = container.preferencesRepository,
                 sessionRepository = container.sessionRepository,
+                roomMetadataSource = container.roomMetadataSource,
                 initialRoomId = initialRoomId,
             )
         },
@@ -97,6 +98,7 @@ fun AppNavigation(
             RoomViewModel(
                 sessionRepository = container.sessionRepository,
                 preferencesRepository = container.preferencesRepository,
+                roomMetadataSource = container.roomMetadataSource,
             )
         },
     )
@@ -117,6 +119,8 @@ fun AppNavigation(
                 onInputChanged = connectViewModel::updateInput,
                 onRoomSelected = { roomId ->
                     connectViewModel.setInput(roomId.toString())
+                    requestConnect(roomId, useDemo = false)
+                    navController.navigate(Routes.Room)
                 },
                 onEnterRoom = { useDemo ->
                     connectViewModel.buildConnectRequest(useDemo)?.let { request ->

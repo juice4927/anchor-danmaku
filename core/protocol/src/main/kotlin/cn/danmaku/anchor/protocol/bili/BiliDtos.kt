@@ -58,6 +58,51 @@ data class BiliDanmuConfData(
     val hostServerList: List<BiliHostDto> = emptyList(),
 )
 
+/** 对应 room/v1/Room/get_info 的顶层响应。 */
+@Serializable
+data class BiliRoomInfoResponse(
+    val code: Int,
+    val message: String? = null,
+    val data: BiliRoomInfoData? = null,
+)
+
+@Serializable
+data class BiliRoomInfoData(
+    @SerialName("room_id")
+    val roomId: Long? = null,
+    @SerialName("uid")
+    val uid: Long? = null,
+    @SerialName("live_status")
+    val liveStatus: Int? = null,
+    @SerialName("online")
+    val online: Long? = null,
+    @SerialName("title")
+    val title: String? = null,
+)
+
+/** 对应 live_user/v1/Master/info 的顶层响应，用于取主播用户名 uname。 */
+@Serializable
+data class BiliMasterInfoResponse(
+    val code: Int,
+    val message: String? = null,
+    val data: BiliMasterInfoData? = null,
+)
+
+@Serializable
+data class BiliMasterInfoData(
+    val info: BiliMasterInfoUser? = null,
+)
+
+@Serializable
+data class BiliMasterInfoUser(
+    @SerialName("uid")
+    val uid: Long? = null,
+    @SerialName("uname")
+    val uname: String? = null,
+    @SerialName("face")
+    val face: String? = null,
+)
+
 @Serializable
 data class BiliFingerprintResponse(
     val code: Int,

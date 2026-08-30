@@ -4,8 +4,10 @@ import android.content.Context
 import cn.danmaku.anchor.domain.session.SessionController
 import cn.danmaku.anchor.domain.time.SystemClock
 import cn.danmaku.anchor.data.AndroidConnectivityObserver
+import cn.danmaku.anchor.data.BiliRoomMetadataSource
 import cn.danmaku.anchor.data.PreferencesRepository
 import cn.danmaku.anchor.data.PreferencesStore
+import cn.danmaku.anchor.data.RoomMetadataSource
 import cn.danmaku.anchor.debug.VariantDemoSourceFactory
 import cn.danmaku.anchor.protocol.bili.BiliLiveGateway
 import cn.danmaku.anchor.protocol.bili.BiliRoomApi
@@ -41,6 +43,7 @@ class AppContainer(
         .callTimeout(10, TimeUnit.SECONDS)
         .build()
     private val roomApi = BiliRoomApi(httpClient)
+    val roomMetadataSource: RoomMetadataSource = BiliRoomMetadataSource(roomApi)
     private val liveGateway = BiliLiveGateway(webSocketClient, roomApi)
     private val coreSessionController = SessionController(
         gateway = liveGateway,

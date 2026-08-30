@@ -8,6 +8,8 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import cn.danmaku.anchor.data.AnchorUserPreferences
 import cn.danmaku.anchor.model.LiveMessage
+import cn.danmaku.anchor.model.LiveStatus
+import cn.danmaku.anchor.model.RoomMetadata
 import cn.danmaku.anchor.ui.UiTags
 import cn.danmaku.anchor.ui.about.AboutPage
 import cn.danmaku.anchor.ui.about.AboutScreen
@@ -32,7 +34,7 @@ class AppUiSmokeTest {
                 ConnectScreen(
                     state = ConnectUiState(
                         roomInput = "987654",
-                        recentRooms = listOf(987654L),
+                        recentRooms = listOf(RoomMetadata(roomId = 987654L, ownerName = "某主播", liveStatus = LiveStatus.LIVE)),
                         demoAvailable = true,
                         demoLabel = "回放演示",
                     ),

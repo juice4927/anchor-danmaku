@@ -1,5 +1,7 @@
 package cn.danmaku.anchor.protocol.bili
 
+import cn.danmaku.anchor.model.LiveStatus
+import cn.danmaku.anchor.model.RoomMetadata
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -124,6 +126,60 @@ class BiliRoomApi(
             liveStatus = data.liveStatus ?: 0,
             restricted = false,
         )
+    }
+
+    /**
+     * 拉取房间展示元数据（主播名 + 开播状态），供"最近连接"列表离线不落库地刷新。
+     * 分两段游客可用接口：get_info 取 live_status/uid，Master/info 取 uname。
+     * 任一子请求失败都优雅降级：能取到 uid 与 live_status 就返回部分结果，
+     * 只有 get_info 都失败才抛错，由调用方决定降级展示。
+     */
+    suspend fun getRoomMetadata(roomId: Long): RoomMetadata {
+        val info = fetchRoomInfo(roomId)
+        val ownerName = info.uid?.let { runCatching { fetchMasterName(it) }.getOrNull() }
+        return RoomMetadata(
+            roomId = info.roomId ?: roomId,
+            roomTitle = info.title?.takeIf { it.isNotBlank() },
+            ownerName = ownerName?.takeIf { it.isNotBlank() },
+            liveStatus = LiveStatus.fromBiliLiveStatus(info.liveStatus),
+        )
+    }
+
+    private suspend fun fetchRoomInfo(roomId: Long): BiliRoomInfoData {
+        val url = baseHttpUrl.newBuilder()
+            .addPathSegments("room/v1/Room/get_info")
+            .addQueryParameter("room_id", roomId.toString())
+            .build()
+        val response = dispatch(fetchVia(url, roomId))
+        val body = response.useBodyString()
+        if (!response.isSuccessful) {
+            throw mapHttpFailure(response.code)
+        }
+        val parsed = runCatching { json.decodeFromString<BiliRoomInfoResponse>(body) }
+            .getOrElse { throw UnknownRecoverableFailure("Invalid get_info JSON", it) }
+        if (parsed.code != 0) {
+            throw RoomNotFoundFailure()
+        }
+        return parsed.data ?: throw UnknownRecoverableFailure("Missing get_info data")
+    }
+
+    private suspend fun fetchMasterName(uid: Long): String? {
+        val host = baseHttpUrl.resolve("/live_user/v1/Master/info")
+        val url = host?.newBuilder()
+            ?.addQueryParameter("uid", uid.toString())
+            ?.build()
+            ?: throw EndpointUnavailableFailure("Unable to build Master/info url")
+        val response = dispatch(fetchVia(url))
+        val body = response.useBodyString()
+        if (!response.isSuccessful) {
+            throw mapHttpFailure(response.code)
+        }
+        val parsed = runCatching { json.decodeFromString<BiliMasterInfoResponse>(body) }
+            .getOrElse { throw UnknownRecoverableFailure("Invalid Master/info JSON", it) }
+        if (parsed.code != 0) {
+            return null
+        }
+        return parsed.data?.info?.uname
     }
 
     suspend fun getDanmuInfo(realRoomId: Long): DanmuInfo {

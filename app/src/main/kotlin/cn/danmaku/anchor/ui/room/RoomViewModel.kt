@@ -6,6 +6,7 @@ import cn.danmaku.anchor.AnchorConnectionState
 import cn.danmaku.anchor.SessionCoordinator
 import cn.danmaku.anchor.data.AnchorUserPreferences
 import cn.danmaku.anchor.data.PreferencesStore
+import cn.danmaku.anchor.data.RoomMetadataSource
 import cn.danmaku.anchor.data.toCorePreferences
 import cn.danmaku.anchor.domain.message.MessagePipeline
 import cn.danmaku.anchor.domain.message.MessagePipelineState
@@ -29,6 +30,8 @@ data class PinnedUiMessage(
 
 data class RoomUiState(
     val connectionState: AnchorConnectionState = AnchorConnectionState(),
+    val roomTitle: String? = null,
+    val roomOwnerName: String? = null,
     val messages: List<LiveMessage> = emptyList(),
     val pinnedMessages: List<PinnedUiMessage> = emptyList(),
     val isPaused: Boolean = false,
@@ -48,6 +51,7 @@ data class RoomUiState(
 class RoomViewModel(
     sessionRepository: SessionCoordinator,
     private val preferencesRepository: PreferencesStore,
+    private val roomMetadataSource: RoomMetadataSource? = null,
     private val dispatcher: CoroutineDispatcher = Dispatchers.Default,
 ) : ViewModel() {
     private val state = MutableStateFlow(RoomUiState())
@@ -55,6 +59,11 @@ class RoomViewModel(
     private val pipelineMutex = Mutex()
 
     val uiState: StateFlow<RoomUiState> = state.asStateFlow()
+
+    // RoomViewModel 以 Activity 作用域创建（AppNavigation 中 viewModel() 声明于 NavHost 外），
+    // 跨导航条目复用。MessagePipeline 是进程内内存态，若连接目标房间变化而不清空，
+    // 切换房间后上一房间的弹幕会残留。这里跟随连接状态里的房间号，变化即重置消息流水线。
+    private var activeRoomId: Long? = null
 
     init {
         viewModelScope.launch {
@@ -68,6 +77,12 @@ class RoomViewModel(
         }
         viewModelScope.launch {
             sessionRepository.state.collect { sessionState ->
+                val roomId = sessionState.roomId
+                if (roomId != null && roomId != activeRoomId) {
+                    activeRoomId = roomId
+                    resetPipelineOnRoomSwitch()
+                    refreshRoomHeader(roomId)
+                }
                 state.update { it.copy(connectionState = sessionState) }
             }
         }
@@ -78,6 +93,26 @@ class RoomViewModel(
                 }
                 applyPipelineState(result.state)
             }
+        }
+    }
+
+    private suspend fun resetPipelineOnRoomSwitch() {
+        val pipelineState = pipelineMutex.withLock {
+            messagePipeline.resetForNewRoom()
+            messagePipeline.snapshot()
+        }
+        applyPipelineState(pipelineState)
+    }
+
+    /** 拉取房间标题与主播名用于弹幕台顶部；source 缺失或拉取失败时静默降级为仅房间号。 */
+    private suspend fun refreshRoomHeader(roomId: Long) {
+        val metadata = roomMetadataSource
+            ?.let { runCatching { it.loadRoomMetadata(roomId) }.getOrNull() }
+        state.update { current ->
+            current.copy(
+                roomTitle = metadata?.roomTitle?.takeIf { it.isNotBlank() },
+                roomOwnerName = metadata?.ownerName?.takeIf { it.isNotBlank() },
+            )
         }
     }
 
