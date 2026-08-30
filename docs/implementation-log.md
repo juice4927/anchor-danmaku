@@ -91,3 +91,25 @@
 - 新配方：仓库克隆到纯 ASCII 路径 `C:\anchor-build`（用 E 盘工作树覆盖改动文件与 fixtures 原字节），`GRADLE_USER_HOME=C:\anchor-gradle-user`（junction 指回 `.gradle-user` 缓存，免重下载依赖），`LOCALAPPDATA` 重定向到克隆内，`TMP`/`TEMP` 显式 Windows 路径。E 盘原路径无法直接修复（系统 ACP 不可按进程覆盖）。
 - 新克隆在 `core.autocrlf` + `* text=auto` 下 checkout 会把 fixtures 换行改写为 CRLF，导致 `protocolFixtureCheck` SHA-256 失配；已用原字节覆盖并在 `.gitattributes` 增加 `fixtures/** -text` 根治。
 - `verifyAll` 全绿：protocolFixtureCheck 20 项、权限门 6 项、12,000 事件烟测、APK 尺寸门、Configuration Cache 命中；Debug 10,649,248 bytes（SHA-256 `045c0fa1…`）、unsigned Release 1,561,043 bytes（`28ab8c37…`）。
+
+## 阶段 17：游客弹幕被静默过滤修复（匿名 buvid3 身份）
+
+### 根因（2026-08 实测定界）
+- 现象：游客连接握手/心跳成功（"已收 5"），人气与开播状态实时，但 `DANMU_MSG` 永远不下发；多房间一致。
+- 协议对照（真实网页 WS 抓包 + 协议探针 A/B）：B 站自 2025-05-26 起 `getDanmuInfo` 强制 WBI（项目已实现），自 2025-06-27 起要求请求 Cookie 携带非空 `buvid3`，否则服务端接受握手但静默过滤业务消息。本项目 HTTP/WS 全链路无 Cookie，op=7 认证体 `buvid` 固定空串。
+- 修复验证：`finger/spi` 取匿名 `b_3/b_4` → Cookie 贯通 nav/getDanmuInfo/WS Upgrade → 认证体 `buvid=<buvid3>` 并补网页端 `support_ack:true`、`scene:"room"` → 真实房间 6154037（短号 732）45 秒收到 80+ 条 `DANMU_MSG`；无 buvid 的对照组 0 条。`queue_uid/queue_uuid` 经验证非必需，未引入。
+
+### 改动内容
+- 新增 `BiliAnonymousIdentity`/`BiliAnonymousIdentityProvider` 与 `BiliFingerprintResponse` DTO：匿名身份仅存进程内存，不落盘、不持久化、不与登录 Cookie 混用；Cookie 值做字符白名单校验。
+- `BiliRoomApi`：懒加载并缓存匿名身份（互斥锁防并发重复获取）；`fetchVia`/`commonHeaders` 显式附加 `Cookie: buvid3=…; buvid4=…`（不启用全局 CookieJar）；指纹接口失败映射为可恢复错误（429→RateLimited），不复用 room 的 404 语义。
+- `BiliPacketCodec`：新增 `BiliAuthContext`（roomId/token/buvid3/supportAck/scene），认证体按网页端字段集序列化；保留 `(roomId, token)` 兼容重载仅供纯协议测试。
+- `BiliLiveGateway`：一次 `start()` 内所有 host 回退复用同一身份与认证上下文。
+- 隐私文案同步：`PRIVACY.md`、关于页两个说明段、`manual-release-checklist.md` 抓包检查项——明确"仅内存匿名标识、无任何账号 Cookie"，并把 `api.bilibili.com`（WBI 密钥与匿名标识）列入允许域名清单。
+
+### 测试
+- 新增 net10（Cookie 贯通 nav/getDanmuInfo 且身份缓存仅取一次）、net11（指纹 500/429/缺字段均映射可恢复错误且绝不变成 RoomNotFound）、net19（WS Upgrade Cookie 与认证帧 `buvid` 同源、含 `support_ack`/`scene`）；pc07 改为全字段 JSON 解析断言；网关/房间测试工厂注入固定身份避免触网。
+- 真机回归：MuMu Android 12，真实房间 6154037——修复前 20 秒已收 5 条且 0 弹幕；修复后 20 秒已收 127 条（125 条可见弹幕）、2 分钟 498 条，粉丝牌与昵称解析正常，连接稳定。
+
+### 环境备注
+- 本批验证在 `C:\anchor-build` ASCII 克隆中执行（阶段 16 配方）；E 盘工作区经字节级 diff 确认与克隆一致（仅行尾差异）。测试执行器在非 ASCII 路径下报 `ClassNotFoundException`（测试类本身）与阶段 16 的 GradleWorkerMain 同源。
+

@@ -65,8 +65,12 @@ internal object BiliWbiSigner {
         return encoded.toString()
     }
 
+    // B站 WBI 规范强制 w_rid = MD5(query + mixin_key)：此处 MD5 是协议要求的服务端校验算法，
+    // 不用于任何安全目的（完整性/口令/签名），算法由服务端唯一决定，不可替换为更强哈希。
+    private const val SERVER_MANDATED_HASH = "MD5"
+
     private fun md5Hex(input: String): String {
-        val digest = MessageDigest.getInstance("MD5").digest(input.toByteArray(Charsets.UTF_8))
+        val digest = MessageDigest.getInstance(SERVER_MANDATED_HASH).digest(input.toByteArray(Charsets.UTF_8))
         return digest.joinToString("") { byte -> "%02x".format(byte) }
     }
 }

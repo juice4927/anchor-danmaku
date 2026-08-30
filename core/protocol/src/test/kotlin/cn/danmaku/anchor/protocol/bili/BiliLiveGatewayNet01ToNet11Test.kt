@@ -8,6 +8,10 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import okhttp3.OkHttpClient
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
@@ -50,7 +54,7 @@ class BiliLiveGatewayNet01ToNet11Test {
             assertThat(danmuInfo.path).contains("&w_rid=")
             assertThat(wsRequest.path).isEqualTo("/ws/broadcastlv.chat.bilibili.com/443")
             assertThat(wsRequest.getHeader("Referer")).isEqualTo("https://live.bilibili.com/987654")
-            assertThat(wsRequest.getHeader("Cookie")).isNull()
+            assertThat(wsRequest.getHeader("Cookie")).isEqualTo(TEST_IDENTITY.cookieHeader())
             session.close()
             collector.cancelAndJoin()
         }
@@ -482,6 +486,43 @@ class BiliLiveGatewayNet01ToNet11Test {
         }
     }
 
+    @Test
+    fun net19_authFrameSharesAnonymousIdentityWithWsUpgradeCookie() = runBlocking {
+        withServer { server ->
+            var authBody: String? = null
+            server.enqueueHttpFixtures()
+            server.enqueueWsScript("/ws/broadcastlv.chat.bilibili.com/443") { ws, clientMessage ->
+                if (clientMessage.size > 16 && authBody == null) {
+                    authBody = clientMessage.substring(16).utf8()
+                    ws.sendBinaryFixture("ws/auth-ok.b64")
+                }
+            }
+            val gateway = gateway(server)
+            val session = gateway.createSession(1234L)
+            val events = mutableListOf<cn.danmaku.anchor.domain.gateway.GatewayEvent>()
+            val collector = launch { session.events.collect { events += it } }
+            session.start()
+            withTimeout(1_000) {
+                while (events.none { it is cn.danmaku.anchor.domain.gateway.GatewayEvent.RoomResolved }) {
+                    delay(10)
+                }
+            }
+            repeat(3) { server.takeRequest() }
+            val wsRequest = server.takeRequest(1, TimeUnit.SECONDS)
+                ?: throw AssertionError("ws upgrade was not recorded")
+            assertThat(wsRequest.getHeader("Cookie")).isEqualTo(TEST_IDENTITY.cookieHeader())
+            val body = authBody ?: throw AssertionError("auth frame was not captured")
+            val json = testJson.parseToJsonElement(body).jsonObject
+            assertThat(json["uid"]?.jsonPrimitive?.long).isEqualTo(0L)
+            assertThat(json["roomid"]?.jsonPrimitive?.long).isEqualTo(987654L)
+            assertThat(json["buvid"]?.jsonPrimitive?.content).isEqualTo(TEST_BUVID3)
+            assertThat(json["support_ack"]?.jsonPrimitive?.boolean).isTrue()
+            assertThat(json["scene"]?.jsonPrimitive?.content).isEqualTo("room")
+            session.close()
+            collector.cancelAndJoin()
+        }
+    }
+
     private fun gateway(server: MockWebServer, wsBuilder: (String, Int) -> okhttp3.HttpUrl = { host, port -> server.url("/ws/$host/$port") }): BiliLiveGateway {
         val client = OkHttpClient.Builder().build()
         return BiliLiveGateway(
@@ -496,6 +537,8 @@ class BiliLiveGatewayNet01ToNet11Test {
             client = OkHttpClient.Builder().build(),
             baseHttpUrl = server.url("/"),
             wbiNavUrl = server.url("/x/web-interface/nav"),
+            fingerprintUrl = server.url("/x/frontend/finger/spi"),
+            anonymousIdentityProvider = TEST_IDENTITY_PROVIDER,
         )
 
     private fun MockWebServer.enqueueHttpFixtures(

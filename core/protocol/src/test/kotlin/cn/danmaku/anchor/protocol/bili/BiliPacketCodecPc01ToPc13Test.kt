@@ -1,6 +1,11 @@
 package cn.danmaku.anchor.protocol.bili
 
 import com.google.common.truth.Truth.assertThat
+import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import org.junit.Test
 import java.io.ByteArrayOutputStream
 import java.nio.ByteBuffer
@@ -71,14 +76,22 @@ class BiliPacketCodecPc01ToPc13Test {
 
     @Test
     fun pc07_authBody() {
-        val auth = codec.authPacket(987654, "fixture-token-not-secret")
-        val body = auth.body.decodeToString()
-        assertThat(body).contains("\"uid\":0")
-        assertThat(body).contains("\"roomid\":987654")
-        assertThat(body).contains("\"protover\":3")
-        assertThat(body).contains("\"platform\":\"web\"")
-        assertThat(body).contains("\"type\":2")
-        assertThat(body).contains("\"key\":\"fixture-token-not-secret\"")
+        val context = BiliAuthContext(
+            roomId = 987654,
+            token = "fixture-token-not-secret",
+            buvid3 = "fixture-buvid3",
+        )
+        val auth = codec.authPacket(context)
+        val json = testJson.parseToJsonElement(auth.body.decodeToString()).jsonObject
+        assertThat(json["uid"]?.jsonPrimitive?.long).isEqualTo(0L)
+        assertThat(json["roomid"]?.jsonPrimitive?.long).isEqualTo(987654L)
+        assertThat(json["protover"]?.jsonPrimitive?.int).isEqualTo(3)
+        assertThat(json["buvid"]?.jsonPrimitive?.content).isEqualTo("fixture-buvid3")
+        assertThat(json["support_ack"]?.jsonPrimitive?.boolean).isTrue()
+        assertThat(json["scene"]?.jsonPrimitive?.content).isEqualTo("room")
+        assertThat(json["platform"]?.jsonPrimitive?.content).isEqualTo("web")
+        assertThat(json["type"]?.jsonPrimitive?.int).isEqualTo(2)
+        assertThat(json["key"]?.jsonPrimitive?.content).isEqualTo("fixture-token-not-secret")
     }
 
     @Test

@@ -1,6 +1,8 @@
 package cn.danmaku.anchor.protocol.bili
 
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import okhttp3.Call
 import okhttp3.Callback
@@ -70,6 +72,7 @@ data class DanmuInfo(
     val roomId: Long,
     val token: String,
     val hostList: List<DanmuHost>,
+    val anonymousIdentity: BiliAnonymousIdentity,
 )
 
 class BiliRoomApi(
@@ -78,6 +81,8 @@ class BiliRoomApi(
     private val json: Json = Json { ignoreUnknownKeys = true },
     private val baseHttpUrl: HttpUrl = "https://api.live.bilibili.com/".toHttpUrl(),
     private val wbiNavUrl: HttpUrl = "https://api.bilibili.com/x/web-interface/nav".toHttpUrl(),
+    private val fingerprintUrl: HttpUrl = "https://api.bilibili.com/x/frontend/finger/spi".toHttpUrl(),
+    private val anonymousIdentityProvider: BiliAnonymousIdentityProvider? = null,
 ) {
     private val client = client
 
@@ -85,13 +90,17 @@ class BiliRoomApi(
     // 失败时不写入缓存，保持现有回退语义。
     @Volatile
     private var wbiCache: Pair<Pair<String, String>, Long>? = null
+    private val identityGuard = Mutex()
+
+    @Volatile
+    private var identityCache: BiliAnonymousIdentity? = null
 
     suspend fun resolveRoom(inputRoomId: Long): ResolvedRoom {
         val url = baseHttpUrl.newBuilder()
             .addPathSegments("room/v1/Room/room_init")
             .addQueryParameter("id", inputRoomId.toString())
             .build()
-        val response = execute(httpRequest(url, inputRoomId))
+        val response = dispatch(fetchVia(url, inputRoomId))
         val body = response.useBodyString()
         if (!response.isSuccessful) {
             throw mapHttpFailure(response.code)
@@ -118,24 +127,30 @@ class BiliRoomApi(
     }
 
     suspend fun getDanmuInfo(realRoomId: Long): DanmuInfo {
-        val wbiKeys = runCatching { fetchWbiKeys() }.getOrNull()
+        val identity = getAnonymousIdentity()
+        val wbiKeys = runCatching { fetchWbiKeys(identity) }.getOrNull()
         val v2Failure = try {
             if (wbiKeys == null) {
                 EndpointUnavailableFailure("danmu info wbi keys unavailable")
             } else {
-                return fetchDanmuInfoV2(realRoomId, wbiKeys.first, wbiKeys.second)
+                return fetchDanmuInfoV2(realRoomId, wbiKeys.first, wbiKeys.second, identity)
             }
         } catch (failure: EndpointUnavailableFailure) {
             failure
         }
         return if (v2Failure.message?.startsWith("danmu info") == true) {
-            fetchDanmuConf(realRoomId)
+            fetchDanmuConf(realRoomId, identity)
         } else {
             throw v2Failure
         }
     }
 
-    private suspend fun fetchDanmuInfoV2(realRoomId: Long, imgKey: String, subKey: String): DanmuInfo {
+    private suspend fun fetchDanmuInfoV2(
+        realRoomId: Long,
+        imgKey: String,
+        subKey: String,
+        identity: BiliAnonymousIdentity,
+    ): DanmuInfo {
         val params = BiliWbiSigner.sign(
             params = linkedMapOf(
                 "id" to realRoomId.toString(),
@@ -151,7 +166,7 @@ class BiliRoomApi(
                 params.forEach { (name, value) -> addQueryParameter(name, value) }
             }
             .build()
-        val response = execute(httpRequest(url, realRoomId))
+        val response = dispatch(fetchVia(url, realRoomId, identity))
         val body = response.useBodyString()
         if (!response.isSuccessful) {
             throw mapHttpFailure(response.code)
@@ -167,17 +182,18 @@ class BiliRoomApi(
             roomId = realRoomId,
             token = token,
             hostList = toDanmuHosts(data.hostList),
+            anonymousIdentity = identity,
         )
     }
 
-    private suspend fun fetchDanmuConf(realRoomId: Long): DanmuInfo {
+    private suspend fun fetchDanmuConf(realRoomId: Long, identity: BiliAnonymousIdentity): DanmuInfo {
         val url = baseHttpUrl.newBuilder()
             .addPathSegments("room/v1/Danmu/getConf")
             .addQueryParameter("room_id", realRoomId.toString())
             .addQueryParameter("platform", "pc")
             .addQueryParameter("player", "web")
             .build()
-        val response = execute(httpRequest(url, realRoomId))
+        val response = dispatch(fetchVia(url, realRoomId, identity))
         val body = response.useBodyString()
         if (!response.isSuccessful) {
             throw mapHttpFailure(response.code)
@@ -193,17 +209,18 @@ class BiliRoomApi(
             roomId = realRoomId,
             token = token,
             hostList = toDanmuHosts(data.hostServerList),
+            anonymousIdentity = identity,
         )
     }
 
-    private suspend fun fetchWbiKeys(): Pair<String, String> {
+    private suspend fun fetchWbiKeys(identity: BiliAnonymousIdentity): Pair<String, String> {
         val now = System.currentTimeMillis()
         wbiCache?.let { (keys, fetchedAtMillis) ->
             if (now - fetchedAtMillis < WBI_CACHE_TTL_MILLIS) {
                 return keys
             }
         }
-        val response = execute(httpRequest(wbiNavUrl))
+        val response = dispatch(fetchVia(wbiNavUrl, identity = identity))
         val body = response.useBodyString()
         if (!response.isSuccessful) {
             throw mapHttpFailure(response.code)
@@ -242,26 +259,72 @@ class BiliRoomApi(
         return hosts
     }
 
-    fun newWebSocketRequest(url: HttpUrl, realRoomId: Long): Request =
+    fun newWebSocketRequest(
+        url: HttpUrl,
+        realRoomId: Long,
+        identity: BiliAnonymousIdentity,
+    ): Request =
         Request.Builder()
             .url(url)
-            .headers(commonHeaders(realRoomId).newBuilder().add("Origin", "https://live.bilibili.com").build())
+            .headers(commonHeaders(realRoomId, identity).newBuilder().add("Origin", "https://live.bilibili.com").build())
             .build()
 
-    private fun httpRequest(url: HttpUrl, realRoomId: Long? = null): Request =
+    private fun fetchVia(
+        url: HttpUrl,
+        roomIdHint: Long? = null,
+        identity: BiliAnonymousIdentity? = null,
+    ): Request =
         Request.Builder()
             .url(url)
-            .headers(commonHeaders(realRoomId ?: 0L))
+            .headers(commonHeaders(roomIdHint ?: 0L, identity))
             .get()
             .build()
 
-    private fun commonHeaders(realRoomId: Long): Headers =
+    private fun commonHeaders(realRoomId: Long, identity: BiliAnonymousIdentity?): Headers =
         Headers.Builder()
             .add("User-Agent", DEFAULT_USER_AGENT)
             .add("Referer", "https://live.bilibili.com/$realRoomId")
+            .apply { identity?.let { add("Cookie", it.cookieHeader()) } }
             .build()
 
-    private suspend fun execute(request: Request): Response = suspendCancellableCoroutine { continuation ->
+    /**
+     * 匿名设备标识只在进程内缓存：buvid3/buvid4 由 B 站指纹接口签发，与账号登录态无关。
+     * 2025-06 起 getDanmuInfo 要求 Cookie 携带非空 buvid3，否则握手成功但业务弹幕被静默过滤。
+     */
+    suspend fun getAnonymousIdentity(): BiliAnonymousIdentity {
+        identityCache?.let { return it }
+        return identityGuard.withLock {
+            identityCache?.let { cached -> return@withLock cached }
+            val identity = anonymousIdentityProvider?.load() ?: fetchAnonymousIdentity()
+            identityCache = identity
+            identity
+        }
+    }
+
+    private suspend fun fetchAnonymousIdentity(): BiliAnonymousIdentity {
+        val spiResponse = dispatch(fetchVia(fingerprintUrl))
+        val body = spiResponse.useBodyString()
+        if (!spiResponse.isSuccessful) {
+            throw when (spiResponse.code) {
+                429 -> RateLimitedFailure("fingerprint rate limited")
+                else -> EndpointUnavailableFailure("fingerprint HTTP ${spiResponse.code}")
+            }
+        }
+        val parsed = runCatching { json.decodeFromString<BiliFingerprintResponse>(body) }
+            .getOrElse { throw UnknownRecoverableFailure("Invalid fingerprint JSON", it) }
+        if (parsed.code != 0) {
+            throw EndpointUnavailableFailure("fingerprint code=${parsed.code}")
+        }
+        val data = parsed.data ?: throw UnknownRecoverableFailure("Missing fingerprint data")
+        val buvid3 = data.buvid3?.takeIf { it.isNotBlank() }
+            ?: throw UnknownRecoverableFailure("Missing buvid3")
+        val buvid4 = data.buvid4?.takeIf { it.isNotBlank() }
+            ?: throw UnknownRecoverableFailure("Missing buvid4")
+        return runCatching { BiliAnonymousIdentity(buvid3, buvid4) }
+            .getOrElse { throw UnknownRecoverableFailure("Invalid anonymous identity", it) }
+    }
+
+    private suspend fun dispatch(request: Request): Response = suspendCancellableCoroutine { continuation ->
         val call = client.newCall(request)
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(

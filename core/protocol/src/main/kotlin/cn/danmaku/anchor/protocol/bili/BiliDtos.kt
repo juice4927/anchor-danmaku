@@ -59,6 +59,21 @@ data class BiliDanmuConfData(
 )
 
 @Serializable
+data class BiliFingerprintResponse(
+    val code: Int,
+    val message: String? = null,
+    val data: BiliFingerprintData? = null,
+)
+
+@Serializable
+data class BiliFingerprintData(
+    @SerialName("b_3")
+    val buvid3: String? = null,
+    @SerialName("b_4")
+    val buvid4: String? = null,
+)
+
+@Serializable
 data class BiliWbiNavResponse(
     val code: Int,
     val message: String? = null,

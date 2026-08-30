@@ -10,7 +10,7 @@
 - [ ] 使用 Macrobenchmark 或 JankStats 记录高流量滚动性能。
 - [ ] 完成 Wi-Fi/移动网络切换、断网 60 秒和 30% 丢包恢复测试。
 - [ ] 验证通知、默认提示音、250ms 震动、保持亮屏和通知停止操作。
-- [ ] 抓包确认只访问允许的 B站 HTTPS/WSS 域名且无 Cookie/账号数据上传。
+- [ ] 抓包确认只访问允许的 B站 HTTPS/WSS 域名；仅有匿名 buvid3/buvid4 Cookie，无任何账号 Cookie（SESSDATA、DedeUserID、bili_jct 等）。
 - [ ] 复核关于页、隐私说明、非官方声明和第三方许可证。
 - [ ] 按分发渠道升级 targetSdk、完成生产签名、商店材料和隐私政策。
 - [ ] 7 天内测 crash-free users 达到 99.5%。

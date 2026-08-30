@@ -265,6 +265,8 @@ class BiliBoundaryCoverageTest {
         client = OkHttpClient.Builder().build(),
         baseHttpUrl = server.url("/"),
         wbiNavUrl = server.url("/x/web-interface/nav"),
+        fingerprintUrl = server.url("/x/frontend/finger/spi"),
+        anonymousIdentityProvider = TEST_IDENTITY_PROVIDER,
     )
 
     private suspend fun withServer(block: suspend (MockWebServer) -> Unit) {

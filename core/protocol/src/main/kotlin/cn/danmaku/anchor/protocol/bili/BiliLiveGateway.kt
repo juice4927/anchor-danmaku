@@ -56,6 +56,12 @@ class BiliLiveGateway(
             val roomInfo = room.toRoomInfo()
             mutableEvents.emit(GatewayEvent.RoomResolved(roomInfo))
             val danmuInfo = roomApi.getDanmuInfo(room.roomId)
+            // 同一次连接的所有 host 尝试复用同一匿名身份，避免握手态漂移。
+            val authContext = BiliAuthContext(
+                roomId = room.roomId,
+                token = danmuInfo.token,
+                buvid3 = danmuInfo.anonymousIdentity.buvid3,
+            )
 
             var lastFailure: BiliFailure? = null
             for ((index, host) in danmuInfo.hostList.withIndex()) {
@@ -68,7 +74,10 @@ class BiliLiveGateway(
                     continue
                 }
                 try {
-                    val session = BiliWebSocketSession.connect(client, roomApi.newWebSocketRequest(url, room.roomId))
+                    val session = BiliWebSocketSession.connect(
+                        client,
+                        roomApi.newWebSocketRequest(url, room.roomId, danmuInfo.anonymousIdentity),
+                    )
                     socketSession = session
                     val authenticated = CompletableDeferred<Unit>()
                     readerJob = scope.launch {
@@ -79,7 +88,7 @@ class BiliLiveGateway(
                         )
                     }
                     mutableEvents.emit(GatewayEvent.Authenticating)
-                    if (!session.send(packetCodec.encodeAuthPacket(room.roomId, danmuInfo.token))) {
+                    if (!session.send(packetCodec.encodeAuthPacket(authContext))) {
                         throw HostRejectedFailure(host.host)
                     }
                     withTimeout(10_000) {

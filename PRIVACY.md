@@ -1,10 +1,13 @@
 # 隐私说明
 
-主播弹幕台不提供账号登录，不读取或保存 Cookie、SESSDATA、访问密钥或签名信息。
+主播弹幕台不提供账号登录，不读取、不保存、不发送任何账号凭据（如 SESSDATA、DedeUserID、bili_jct、access_key 或登录 Cookie）。
+
+为连接公开弹幕服务，应用会在进程内获取并使用一对匿名设备标识（buvid3/buvid4）：首次连接时从 Bilibili 官方指纹接口 `api.bilibili.com/x/frontend/finger/spi` 获取，仅保存在内存中，退出应用即消失；只随弹幕相关请求发送给 Bilibili 官方域名，用于维持游客弹幕会话。该标识不是账号身份，应用不会将其用于画像或追踪。
 
 应用只在用户主动连接时访问 Bilibili 的公开 HTTPS/WSS 服务：
 
 - `api.live.bilibili.com`，用于解析直播间和获取弹幕节点；
+- `api.bilibili.com`，用于获取 WBI 签名密钥和上述匿名设备标识；
 - 接口返回且域名属于 `bilibili.com` 或其子域的 WSS 弹幕节点。
 
 应用没有自建服务器，不上传弹幕、房间记录、黑名单或设置。本地 Preferences DataStore 只保存显示/提醒设置、最近房间号、关键词和 uid 黑名单；卸载应用后由 Android 删除。

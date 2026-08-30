@@ -52,3 +52,17 @@ internal fun wbiNavResponse(): MockResponse = MockResponse()
         }}}
         """.trimIndent(),
     )
+
+internal const val TEST_BUVID3 = "test-buvid3-value"
+internal const val TEST_BUVID4 = "test-buvid4-value"
+internal val TEST_IDENTITY = BiliAnonymousIdentity(TEST_BUVID3, TEST_BUVID4)
+internal val TEST_IDENTITY_PROVIDER = BiliAnonymousIdentityProvider { TEST_IDENTITY }
+
+internal fun fingerSpiResponse(): MockResponse = MockResponse()
+    .setResponseCode(200)
+    .setHeader("Content-Type", "application/json")
+    .setBody(
+        """
+        {"code":0,"message":"ok","data":{"b_3":"$TEST_BUVID3","b_4":"$TEST_BUVID4"}}
+        """.trimIndent(),
+    )

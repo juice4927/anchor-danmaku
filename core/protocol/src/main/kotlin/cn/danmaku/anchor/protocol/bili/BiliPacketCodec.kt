@@ -29,6 +29,14 @@ class ChildPacketLimitExceededException(actual: Int, limit: Int) :
 class NestingDepthExceededException(actual: Int, limit: Int) :
     PayloadLimitExceededException("nestingDepth", actual, limit)
 
+data class BiliAuthContext(
+    val roomId: Long,
+    val token: String,
+    val buvid3: String,
+    val supportAck: Boolean = true,
+    val scene: String = "room",
+)
+
 class BiliPacketCodec(
     private val diagnostics: SafeDiagnostics = SafeDiagnostics(),
     private val json: Json = Json { ignoreUnknownKeys = true },
@@ -54,6 +62,9 @@ class BiliPacketCodec(
         val roomid: Long,
         val protover: Int,
         val buvid: String,
+        @kotlinx.serialization.SerialName("support_ack")
+        val supportAck: Boolean,
+        val scene: String,
         val platform: String,
         val type: Int,
         val key: String,
@@ -70,15 +81,17 @@ class BiliPacketCodec(
         return buffer.array()
     }
 
-    fun authPacket(realRoomId: Long, token: String): BiliPacket {
+    fun authPacket(context: BiliAuthContext): BiliPacket {
         val payload = AuthRequest(
             uid = 0,
-            roomid = realRoomId,
+            roomid = context.roomId,
             protover = 3,
-            buvid = "",
+            buvid = context.buvid3,
+            supportAck = context.supportAck,
+            scene = context.scene,
             platform = "web",
             type = 2,
-            key = token,
+            key = context.token,
         )
         val body = json.encodeToString(payload).toByteArray(StandardCharsets.UTF_8)
         return BiliPacket(
@@ -91,6 +104,10 @@ class BiliPacketCodec(
         )
     }
 
+    /** Compatibility overload for protocol-only callers; production uses the explicit context. */
+    fun authPacket(realRoomId: Long, token: String): BiliPacket =
+        authPacket(BiliAuthContext(realRoomId, token, buvid3 = ""))
+
     fun heartbeatPacket(): BiliPacket {
         val body = "[object Object]".toByteArray(StandardCharsets.UTF_8)
         return BiliPacket(
@@ -102,6 +119,8 @@ class BiliPacketCodec(
             body = body,
         )
     }
+
+    fun encodeAuthPacket(context: BiliAuthContext): ByteArray = encode(authPacket(context))
 
     fun encodeAuthPacket(realRoomId: Long, token: String): ByteArray = encode(authPacket(realRoomId, token))
 

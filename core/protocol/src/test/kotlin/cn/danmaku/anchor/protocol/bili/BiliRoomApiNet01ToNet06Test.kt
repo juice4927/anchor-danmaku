@@ -226,14 +226,91 @@ class BiliRoomApiNet01ToNet06Test {
         }
     }
 
+    @Test
+    fun net10_anonymousIdentityCookieIsSentOnDanmuRequestsAndCached() = runBlockingTest {
+        withServer { server ->
+            var spiRequests = 0
+            val requestPaths = mutableListOf<String>()
+            val requestCookies = mutableListOf<String?>()
+            server.dispatcher = object : Dispatcher() {
+                override fun dispatch(request: RecordedRequest): MockResponse {
+                    val path = request.path ?: return MockResponse().setResponseCode(404)
+                    requestPaths += path
+                    requestCookies += request.getHeader("Cookie")
+                    return when {
+                        path.startsWith("/x/frontend/finger/spi") -> {
+                            spiRequests += 1
+                            fingerSpiResponse()
+                        }
+
+                        path.startsWith("/x/web-interface/nav") -> wbiNavResponse()
+
+                        path.startsWith("/xlive/web-room/v1/index/getDanmuInfo") ->
+                            MockResponse()
+                                .setResponseCode(200)
+                                .setHeader("Content-Type", "application/json")
+                                .setBody(
+                                    """
+                                    {"code":0,"message":"OK","ttl":1,"data":{
+                                      "token":"fixture-token-not-secret",
+                                      "host_list":[{"host":"broadcastlv.chat.bilibili.com","wss_port":443}]
+                                    }}
+                                    """.trimIndent(),
+                                )
+
+                        else -> MockResponse().setResponseCode(404)
+                    }
+                }
+            }
+            val api = roomApi(server, fingerprintInjected = false)
+            val info = api.getDanmuInfo(987654L)
+            assertThat(info.anonymousIdentity).isEqualTo(TEST_IDENTITY)
+
+            api.getDanmuInfo(987654L)
+            assertThat(spiRequests).isEqualTo(1)
+            val navCookie = requestCookies.filterIndexed { index, _ -> requestPaths[index].startsWith("/x/web-interface/nav") }
+            val danmuCookie = requestCookies.filterIndexed { index, _ ->
+                requestPaths[index].startsWith("/xlive/web-room/v1/index/getDanmuInfo")
+            }
+            assertThat(navCookie.single()).isEqualTo(TEST_IDENTITY.cookieHeader())
+            assertThat(danmuCookie.last()).isEqualTo(TEST_IDENTITY.cookieHeader())
+        }
+    }
+
+    @Test
+    fun net11_fingerprintFailureStaysRecoverableAndNeverMapsToRoomNotFound() = runBlockingTest {
+        withServer { server ->
+            server.enqueueHttpResponse("/x/frontend/finger/spi", 500, """{"message":"oops"}""")
+            val api = roomApi(server, fingerprintInjected = false)
+            val failure = runCatching { api.getDanmuInfo(987654L) }.exceptionOrNull()
+            assertThat(failure).isInstanceOf(EndpointUnavailableFailure::class.java)
+            assertThat(failure).isNotInstanceOf(RoomNotFoundFailure::class.java)
+
+            server.enqueueHttpResponse("/x/frontend/finger/spi", 429, "{}")
+            val rateLimited = runCatching { roomApi(server, fingerprintInjected = false).getDanmuInfo(987654L) }.exceptionOrNull()
+            assertThat(rateLimited).isInstanceOf(RateLimitedFailure::class.java)
+
+            server.enqueueHttpResponse("/x/frontend/finger/spi", 200, """{"code":0,"data":{"b_3":"only-three"}}""")
+            val missingField = runCatching { roomApi(server, fingerprintInjected = false).getDanmuInfo(987654L) }.exceptionOrNull()
+            assertThat(missingField).isInstanceOf(UnknownRecoverableFailure::class.java)
+            assertThat(missingField).hasMessageThat().contains("buvid4")
+        }
+    }
+
     private fun runBlockingTest(block: suspend () -> Unit) = kotlinx.coroutines.runBlocking { block() }
 
-    private fun roomApi(server: MockWebServer, diagnostics: SafeDiagnostics = SafeDiagnostics()): BiliRoomApi =
+    private fun roomApi(
+        server: MockWebServer,
+        diagnostics: SafeDiagnostics = SafeDiagnostics(),
+        fingerprintInjected: Boolean = true,
+    ): BiliRoomApi =
         BiliRoomApi(
             client = OkHttpClient.Builder().build(),
             diagnostics = diagnostics,
             baseHttpUrl = server.url("/"),
             wbiNavUrl = server.url("/x/web-interface/nav"),
+            fingerprintUrl = server.url("/x/frontend/finger/spi"),
+            anonymousIdentityProvider = if (fingerprintInjected) TEST_IDENTITY_PROVIDER else null,
         )
 
     private fun MockWebServer.enqueueHttpResponse(pathPrefix: String, code: Int, body: String) {
