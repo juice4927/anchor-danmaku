@@ -49,6 +49,8 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import cn.danmaku.anchor.R
+import cn.danmaku.anchor.model.LiveStatus
+import cn.danmaku.anchor.model.RoomMetadata
 import cn.danmaku.anchor.ui.UiTags
 import cn.danmaku.anchor.ui.theme.BiliPink
 import cn.danmaku.anchor.ui.theme.BiliPinkLight
@@ -373,7 +375,7 @@ private fun ConnectCard(
 
 @Composable
 private fun RecentRoomsPanel(
-    rooms: List<Long>,
+    rooms: List<RoomMetadata>,
     onRoomSelected: (Long) -> Unit,
     fillHeight: Boolean = false,
     modifier: Modifier = Modifier,
@@ -424,8 +426,8 @@ private fun RecentRoomsPanel(
                         .then(if (fillHeight) Modifier.fillMaxSize() else Modifier.heightIn(max = 280.dp)),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(rooms) { roomId ->
-                        RecentRoomRow(roomId = roomId, onClick = { onRoomSelected(roomId) })
+                    items(rooms) { room ->
+                        RecentRoomRow(room = room, onClick = { onRoomSelected(room.roomId) })
                     }
                 }
             }
@@ -435,7 +437,7 @@ private fun RecentRoomsPanel(
 
 @Composable
 private fun RecentRoomRow(
-    roomId: Long,
+    room: RoomMetadata,
     onClick: () -> Unit,
 ) {
     Card(
@@ -472,15 +474,22 @@ private fun RecentRoomRow(
             Spacer(modifier = Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "房间 $roomId",
+                    text = room.titleText(),
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
                 )
-                Text(
-                    text = "点击进入直播间",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    LiveStatusDot(liveStatus = room.liveStatus)
+                    Text(
+                        text = room.liveStatus.toDisplayLabel() + " · 点击进入直播间",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             Icon(
                 painter = painterResource(R.drawable.ic_chevron_right),
@@ -489,6 +498,32 @@ private fun RecentRoomRow(
             )
         }
     }
+}
+
+private fun RoomMetadata.titleText(): String =
+    ownerName?.takeIf { it.isNotBlank() }?.let { "$it 的直播间" } ?: "房间 $roomId"
+
+private fun LiveStatus.toDisplayLabel(): String = when (this) {
+    LiveStatus.LIVE -> "直播中"
+    LiveStatus.NOT_LIVE -> "未开播"
+    LiveStatus.ROUND_PLAY -> "轮播中"
+    LiveStatus.UNKNOWN -> "状态未知"
+}
+
+@Composable
+private fun LiveStatusDot(liveStatus: LiveStatus) {
+    val color = when (liveStatus) {
+        LiveStatus.LIVE -> Color(0xFF44D483)
+        LiveStatus.NOT_LIVE -> Color(0xFF9AA5B1)
+        LiveStatus.ROUND_PLAY -> Color(0xFFF5A623)
+        LiveStatus.UNKNOWN -> Color(0xFF9AA5B1)
+    }
+    Box(
+        modifier = Modifier
+            .size(7.dp)
+            .clip(CircleShape)
+            .background(color),
+    )
 }
 
 @Composable

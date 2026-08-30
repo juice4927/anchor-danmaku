@@ -6,7 +6,10 @@ import cn.danmaku.anchor.SessionCoordinator
 import cn.danmaku.anchor.data.AnchorUserPreferences
 import cn.danmaku.anchor.data.BlockedUser
 import cn.danmaku.anchor.data.PreferencesStore
+import cn.danmaku.anchor.data.RoomMetadataSource
 import cn.danmaku.anchor.model.LiveMessage
+import cn.danmaku.anchor.model.RoomMetadata
+import java.io.IOException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -71,6 +74,22 @@ class FakePreferencesStore(
 
     override suspend fun updateScreenOrientation(value: Int) {
         state.value = state.value.copy(screenOrientation = value)
+    }
+}
+
+class FakeRoomMetadataSource(
+    private val metadata: Map<Long, RoomMetadata> = emptyMap(),
+    var failureFor: Long? = null,
+) : RoomMetadataSource {
+    var requestedRoomIds: List<Long> = emptyList()
+        private set
+
+    override suspend fun loadRoomMetadata(roomId: Long): RoomMetadata {
+        requestedRoomIds += roomId
+        if (failureFor == roomId) {
+            throw IOException("network unavailable")
+        }
+        return metadata[roomId] ?: RoomMetadata(roomId = roomId)
     }
 }
 
