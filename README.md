@@ -96,7 +96,7 @@ app (Android/Compose/DataStore)
 
 ## 项目状态
 
-- 版本 0.1.0，处于快速迭代期
+- 版本 0.4.0，处于快速迭代期
 - CI：GitHub Actions（JDK 21）运行 `verifyAll` 全门禁
 - 真实直播长稳测试不进入自动门禁，发布前需人工执行 [发布检查表](docs/manual-release-checklist.md)
 
