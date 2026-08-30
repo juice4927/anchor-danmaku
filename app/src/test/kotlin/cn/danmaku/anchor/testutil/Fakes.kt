@@ -75,6 +75,10 @@ class FakePreferencesStore(
     override suspend fun updateScreenOrientation(value: Int) {
         state.value = state.value.copy(screenOrientation = value)
     }
+
+    override suspend fun updateBatchRefreshEnabled(enabled: Boolean) {
+        state.value = state.value.copy(batchRefreshEnabled = enabled)
+    }
 }
 
 class FakeRoomMetadataSource(

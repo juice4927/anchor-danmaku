@@ -70,6 +70,7 @@ fun SettingsScreen(
     onRemoveRecentRoom: (Long) -> Unit,
     onClearRecentRooms: () -> Unit,
     onScreenOrientationChanged: (Int) -> Unit = {},
+    onBatchRefreshChanged: (Boolean) -> Unit = {},
 ) {
     var keywordInput by rememberSaveable { mutableStateOf("") }
     var currentSection by rememberSaveable { mutableStateOf(SettingsSection.Display) }
@@ -124,6 +125,7 @@ fun SettingsScreen(
                         onOpenPrivacy = onOpenPrivacy,
                         onOpenAbout = onOpenAbout,
                         onScreenOrientationChanged = onScreenOrientationChanged,
+                        onBatchRefreshChanged = onBatchRefreshChanged,
                     )
                 }
             } else {
@@ -161,6 +163,7 @@ fun SettingsScreen(
                         onOpenPrivacy = onOpenPrivacy,
                         onOpenAbout = onOpenAbout,
                         onScreenOrientationChanged = onScreenOrientationChanged,
+                        onBatchRefreshChanged = onBatchRefreshChanged,
                     )
                 }
             }
@@ -412,6 +415,7 @@ private fun SettingsPanel(
     onOpenPrivacy: () -> Unit,
     onOpenAbout: () -> Unit,
     onScreenOrientationChanged: (Int) -> Unit,
+    onBatchRefreshChanged: (Boolean) -> Unit,
 ) {
     Surface(
         modifier = modifier,
@@ -434,6 +438,7 @@ private fun SettingsPanel(
                     onMaxMessagesChanged = onMaxMessagesChanged,
                     onKeepScreenOnChanged = onKeepScreenOnChanged,
                     onScreenOrientationChanged = onScreenOrientationChanged,
+                    onBatchRefreshChanged = onBatchRefreshChanged,
                 )
                 SettingsSection.Alerts -> AlertSettingsContent(
                     state = state,
@@ -485,6 +490,7 @@ private fun DisplaySettingsContent(
     onMaxMessagesChanged: (Int) -> Unit,
     onKeepScreenOnChanged: (Boolean) -> Unit,
     onScreenOrientationChanged: (Int) -> Unit,
+    onBatchRefreshChanged: (Boolean) -> Unit,
 ) {
     CompactGroup(title = "显示", description = "控制弹幕流的字号、容量和跟随方式。") {
         ChoiceSettingRow(
@@ -516,6 +522,12 @@ private fun DisplaySettingsContent(
             selected = state.preferences.screenOrientation,
             label = ::orientationLabel,
             onClick = onScreenOrientationChanged,
+        )
+        SwitchSettingRow(
+            title = "合并刷新模式",
+            subtitle = "高流量下按帧合并刷新弹幕，降低设备负载",
+            checked = state.preferences.batchRefreshEnabled,
+            onCheckedChange = onBatchRefreshChanged,
         )
     }
 }

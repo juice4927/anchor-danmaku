@@ -170,6 +170,7 @@ fun AppNavigation(
                 onRemoveRecentRoom = settingsViewModel::removeRecentRoom,
                 onClearRecentRooms = settingsViewModel::clearRecentRooms,
                 onScreenOrientationChanged = settingsViewModel::updateScreenOrientation,
+                onBatchRefreshChanged = settingsViewModel::updateBatchRefreshEnabled,
             )
         }
         composable(Routes.About) {

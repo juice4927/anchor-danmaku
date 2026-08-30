@@ -21,6 +21,7 @@ data class AnchorUserPreferences(
     val keywordBlacklist: List<String> = emptyList(),
     val blockedUsers: List<BlockedUser> = emptyList(),
     val screenOrientation: Int = SCREEN_ORIENTATION_AUTO,
+    val batchRefreshEnabled: Boolean = true,
 ) {
     companion object {
         const val DEFAULT_FONT_SIZE = 20

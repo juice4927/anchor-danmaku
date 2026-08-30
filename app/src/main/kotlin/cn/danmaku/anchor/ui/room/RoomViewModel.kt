@@ -10,10 +10,14 @@ import cn.danmaku.anchor.data.RoomMetadataSource
 import cn.danmaku.anchor.data.toCorePreferences
 import cn.danmaku.anchor.domain.message.MessagePipeline
 import cn.danmaku.anchor.domain.message.MessagePipelineState
+import cn.danmaku.anchor.domain.message.isImportant
 import cn.danmaku.anchor.domain.time.SystemClock
 import cn.danmaku.anchor.model.LiveMessage
+import cn.danmaku.anchor.model.Money
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -58,6 +62,12 @@ class RoomViewModel(
     private val messagePipeline = MessagePipeline(clock = SystemClock)
     private val pipelineMutex = Mutex()
 
+    // 普通弹幕按时间窗攒批刷新，降低真机高频重组；重要消息(SC/舰队/高额礼物)不受窗约束，立即上屏。
+    private val batchRefreshEnabled = MutableStateFlow(true)
+    private val highlightThresholdMoney = MutableStateFlow(Money.fromWholeCny(100))
+    private val pendingState = MutableStateFlow<MessagePipelineState?>(null)
+    private var flushJob: Job? = null
+
     val uiState: StateFlow<RoomUiState> = state.asStateFlow()
 
     // RoomViewModel 以 Activity 作用域创建（AppNavigation 中 viewModel() 声明于 NavHost 外），
@@ -68,6 +78,8 @@ class RoomViewModel(
     init {
         viewModelScope.launch {
             preferencesRepository.preferences.collect { preferences ->
+                batchRefreshEnabled.value = preferences.batchRefreshEnabled
+                highlightThresholdMoney.value = Money.fromWholeCny(preferences.highlightGiftThresholdYuan.toLong())
                 val pipelineState = pipelineMutex.withLock {
                     messagePipeline.updatePreferences(preferences.toCorePreferences())
                     messagePipeline.snapshot()
@@ -91,8 +103,31 @@ class RoomViewModel(
                 val result = pipelineMutex.withLock {
                     messagePipeline.ingest(message)
                 }
-                applyPipelineState(result.state)
+                val important = message.isImportant(highlightThresholdMoney.value)
+                if (important || !batchRefreshEnabled.value) {
+                    // 重要消息或批量关闭时立即上屏，零延迟。
+                    applyPipelineState(result.state)
+                    clearPending()
+                } else {
+                    // 普通弹幕攒批刷新：只有未被任何用户操作覆盖时，才在窗口后整体提交。
+                    pendingState.value = result.state
+                    scheduleFlushIfNeeded()
+                }
             }
+        }
+    }
+
+    /**
+     * 普通弹幕刷新采用「一次一个调度 job」而非常驻循环：收到普通弹幕且当前无待发任务时，
+     * 才启动一个有界 delay+flush 的 job。这样高流量下重组聚合为每窗口一次，同时循环可在
+     * 任务完成后自然结束（测试环境的 advanceUntilIdle 也能正常排空，不会无限挂起）。
+     */
+    private fun scheduleFlushIfNeeded() {
+        if (flushJob?.isActive == true) return
+        flushJob = viewModelScope.launch(dispatcher) {
+            delay(BATCH_WINDOW_MILLIS)
+            pendingState.value?.let { applyPipelineState(it) }
+            pendingState.value = null
         }
     }
 
@@ -102,6 +137,7 @@ class RoomViewModel(
             messagePipeline.snapshot()
         }
         applyPipelineState(pipelineState)
+        clearPending()
     }
 
     /** 拉取房间标题与主播名用于弹幕台顶部；source 缺失或拉取失败时静默降级为仅房间号。 */
@@ -121,6 +157,7 @@ class RoomViewModel(
         messagePipeline.setPaused(paused)
         state.update { it.copy(isPaused = paused) }
         applyPipelineState(messagePipeline.snapshot())
+        clearPending()
     }
 
     fun clearFeed() {
@@ -138,6 +175,7 @@ class RoomViewModel(
                 messagePipeline.snapshot()
             }
             applyPipelineState(pipelineState)
+            clearPending()
         }
     }
 
@@ -145,12 +183,14 @@ class RoomViewModel(
         messagePipeline.setAutoFollow(true)
         state.update { it.copy(autoFollow = true) }
         applyPipelineState(messagePipeline.snapshot())
+        clearPending()
     }
 
     fun onAutoFollowDisabled() {
         messagePipeline.setAutoFollow(false)
         state.update { it.copy(autoFollow = false) }
         applyPipelineState(messagePipeline.snapshot())
+        clearPending()
     }
 
     fun dismissPinned(id: String) {
@@ -160,6 +200,7 @@ class RoomViewModel(
                 messagePipeline.snapshot()
             }
             applyPipelineState(pipelineState)
+            clearPending()
         }
     }
 
@@ -168,6 +209,13 @@ class RoomViewModel(
         viewModelScope.launch {
             preferencesRepository.addBlockedUser(id, userName.orEmpty())
         }
+    }
+
+    /** 丢弃挂起的普通弹幕快照，避免用户操作/房间切换结果被旧批覆盖。 */
+    private fun clearPending() {
+        pendingState.value = null
+        flushJob?.cancel()
+        flushJob = null
     }
 
     private fun applyPipelineState(
@@ -202,3 +250,6 @@ private fun LiveMessage.pinLabel(): String = when (this) {
     is LiveMessage.GiftMessage -> "礼物"
     is LiveMessage.DanmakuMessage -> "消息"
 }
+
+/** 普通弹幕攒批刷新的时间窗：高流量时把重组从每条一次降到每窗一次。 */
+private const val BATCH_WINDOW_MILLIS: Long = 100L

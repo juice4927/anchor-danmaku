@@ -38,6 +38,7 @@ interface PreferencesStore {
     suspend fun removeBlockedUser(uid: Long)
     suspend fun clearBlockedUsers()
     suspend fun updateScreenOrientation(value: Int)
+    suspend fun updateBatchRefreshEnabled(enabled: Boolean)
 }
 
 class PreferencesRepository(
@@ -155,6 +156,10 @@ class PreferencesRepository(
         store.edit { it[SCREEN_ORIENTATION] = normalizeScreenOrientation(value) }
     }
 
+    override suspend fun updateBatchRefreshEnabled(enabled: Boolean) {
+        store.edit { it[BATCH_REFRESH] = enabled }
+    }
+
     private fun decode(prefs: Preferences): AnchorUserPreferences {
         val minGift = normalizeMinGift(prefs[MIN_GIFT] ?: 0)
         return AnchorUserPreferences(
@@ -174,6 +179,7 @@ class PreferencesRepository(
             screenOrientation = normalizeScreenOrientation(
                 prefs[SCREEN_ORIENTATION] ?: AnchorUserPreferences.SCREEN_ORIENTATION_AUTO,
             ),
+            batchRefreshEnabled = prefs[BATCH_REFRESH] ?: true,
         )
     }
 
@@ -253,5 +259,6 @@ class PreferencesRepository(
         val KEYWORDS = stringPreferencesKey("keywords")
         val BLOCKED_USERS = stringPreferencesKey("blocked_users")
         val SCREEN_ORIENTATION = intPreferencesKey("screen_orientation")
+        val BATCH_REFRESH = booleanPreferencesKey("batch_refresh_enabled")
     }
 }

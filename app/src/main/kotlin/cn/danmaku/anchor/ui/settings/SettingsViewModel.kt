@@ -43,6 +43,7 @@ class SettingsViewModel(
     fun removeRecentRoom(roomId: Long) = launch { preferencesRepository.removeRecentRoom(roomId) }
     fun clearRecentRooms() = launch { preferencesRepository.clearRecentRooms() }
     fun updateScreenOrientation(value: Int) = launch { preferencesRepository.updateScreenOrientation(value) }
+    fun updateBatchRefreshEnabled(value: Boolean) = launch { preferencesRepository.updateBatchRefreshEnabled(value) }
 
     private fun launch(block: suspend () -> Unit) {
         viewModelScope.launch { block() }
