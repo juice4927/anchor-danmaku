@@ -327,7 +327,7 @@ private fun RoomStatusStrip(
                 verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
                 Text(
-                    text = state.connectionState.roomId?.let { "直播间 $it" } ?: "未连接",
+                    text = roomHeaderText(state),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -401,6 +401,17 @@ private fun StatusMetricChip(
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
         )
     }
+}
+
+/** 弹幕台顶部标题：优先组合房间标题、主播名与房间号，缺失部分自动省略。 */
+private fun roomHeaderText(state: RoomUiState): String {
+    val roomId = state.connectionState.roomId
+    val parts = listOfNotNull(
+        state.roomTitle?.takeIf { it.isNotBlank() },
+        state.roomOwnerName?.takeIf { it.isNotBlank() },
+        roomId?.let { "房间 $it" },
+    )
+    return parts.joinToString(separator = " · ").ifBlank { "未连接" }
 }
 
 @Composable

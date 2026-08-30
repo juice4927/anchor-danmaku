@@ -139,6 +139,7 @@ class BiliRoomApi(
         val ownerName = info.uid?.let { runCatching { fetchMasterName(it) }.getOrNull() }
         return RoomMetadata(
             roomId = info.roomId ?: roomId,
+            roomTitle = info.title?.takeIf { it.isNotBlank() },
             ownerName = ownerName?.takeIf { it.isNotBlank() },
             liveStatus = LiveStatus.fromBiliLiveStatus(info.liveStatus),
         )

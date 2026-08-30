@@ -98,6 +98,7 @@ fun AppNavigation(
             RoomViewModel(
                 sessionRepository = container.sessionRepository,
                 preferencesRepository = container.preferencesRepository,
+                roomMetadataSource = container.roomMetadataSource,
             )
         },
     )

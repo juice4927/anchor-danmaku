@@ -2,8 +2,11 @@ package cn.danmaku.anchor
 
 import cn.danmaku.anchor.data.AnchorUserPreferences
 import cn.danmaku.anchor.model.LiveMessage
+import cn.danmaku.anchor.model.LiveStatus
 import cn.danmaku.anchor.model.Money
+import cn.danmaku.anchor.model.RoomMetadata
 import cn.danmaku.anchor.testutil.FakePreferencesStore
+import cn.danmaku.anchor.testutil.FakeRoomMetadataSource
 import cn.danmaku.anchor.testutil.FakeSessionCoordinator
 import cn.danmaku.anchor.testutil.MainDispatcherRule
 import cn.danmaku.anchor.ui.room.RoomViewModel
@@ -26,7 +29,7 @@ class RoomViewModelTest {
         val session = FakeSessionCoordinator(
             initialState = AnchorConnectionState(phase = ConnectionPhase.Connected, roomId = 987654L),
         )
-        val viewModel = RoomViewModel(session, FakePreferencesStore(AnchorUserPreferences(maxMessages = 100)), mainDispatcherRule.dispatcher)
+        val viewModel = RoomViewModel(session, FakePreferencesStore(AnchorUserPreferences(maxMessages = 100)), dispatcher = mainDispatcherRule.dispatcher)
         advanceUntilIdle()
 
         viewModel.togglePause()
@@ -56,7 +59,7 @@ class RoomViewModelTest {
         val session = FakeSessionCoordinator(
             initialState = AnchorConnectionState(phase = ConnectionPhase.Connected, roomId = 987654L),
         )
-        val viewModel = RoomViewModel(session, FakePreferencesStore(AnchorUserPreferences(maxMessages = 100)), mainDispatcherRule.dispatcher)
+        val viewModel = RoomViewModel(session, FakePreferencesStore(AnchorUserPreferences(maxMessages = 100)), dispatcher = mainDispatcherRule.dispatcher)
         advanceUntilIdle()
 
         viewModel.togglePause()
@@ -87,7 +90,7 @@ class RoomViewModelTest {
         val session = FakeSessionCoordinator(
             initialState = AnchorConnectionState(phase = ConnectionPhase.Connected, roomId = 987654L),
         )
-        val viewModel = RoomViewModel(session, FakePreferencesStore(), mainDispatcherRule.dispatcher)
+        val viewModel = RoomViewModel(session, FakePreferencesStore(), dispatcher = mainDispatcherRule.dispatcher)
         advanceUntilIdle()
         session.emitMessage(
             LiveMessage.DanmakuMessage(
@@ -121,7 +124,7 @@ class RoomViewModelTest {
         val session = FakeSessionCoordinator(
             initialState = AnchorConnectionState(phase = ConnectionPhase.Connected, roomId = 987654L),
         )
-        val viewModel = RoomViewModel(session, FakePreferencesStore(), mainDispatcherRule.dispatcher)
+        val viewModel = RoomViewModel(session, FakePreferencesStore(), dispatcher = mainDispatcherRule.dispatcher)
         advanceUntilIdle()
 
         viewModel.onAutoFollowDisabled()
@@ -155,7 +158,7 @@ class RoomViewModelTest {
         val session = FakeSessionCoordinator(
             initialState = AnchorConnectionState(phase = ConnectionPhase.Connected, roomId = 987654L),
         )
-        val viewModel = RoomViewModel(session, FakePreferencesStore(AnchorUserPreferences(maxMessages = 100)), mainDispatcherRule.dispatcher)
+        val viewModel = RoomViewModel(session, FakePreferencesStore(AnchorUserPreferences(maxMessages = 100)), dispatcher = mainDispatcherRule.dispatcher)
         advanceUntilIdle()
 
         // 房间 A 收到弹幕
@@ -184,5 +187,31 @@ class RoomViewModelTest {
         assertEquals(0, viewModel.uiState.value.receivedCount)
         assertEquals(ConnectionPhase.Connected, viewModel.uiState.value.connectionState.phase)
         assertEquals(11111L, viewModel.uiState.value.connectionState.roomId)
+    }
+
+    @Test
+    fun connectedRoomPopulatesTitleAndOwnerName() = runTest {
+        val session = FakeSessionCoordinator(
+            initialState = AnchorConnectionState(phase = ConnectionPhase.Connecting, roomId = 6154037L),
+        )
+        val viewModel = RoomViewModel(
+            session,
+            FakePreferencesStore(),
+            roomMetadataSource = FakeRoomMetadataSource(
+                mapOf(
+                    6154037L to RoomMetadata(
+                        roomId = 6154037L,
+                        roomTitle = "小菲开学前最后一舞",
+                        ownerName = "永雏塔菲",
+                        liveStatus = LiveStatus.LIVE,
+                    ),
+                ),
+            ),
+            dispatcher = mainDispatcherRule.dispatcher,
+        )
+        advanceUntilIdle()
+
+        assertEquals("小菲开学前最后一舞", viewModel.uiState.value.roomTitle)
+        assertEquals("永雏塔菲", viewModel.uiState.value.roomOwnerName)
     }
 }
