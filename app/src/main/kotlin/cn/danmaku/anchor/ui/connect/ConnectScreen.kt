@@ -69,7 +69,7 @@ fun ConnectScreen(
         color = MaterialTheme.colorScheme.background,
     ) {
         androidx.compose.foundation.layout.BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val wide = maxWidth >= 840.dp
+            val wide = maxWidth >= 840.dp || maxWidth > maxHeight
             if (wide) {
                 Column(
                     modifier = Modifier

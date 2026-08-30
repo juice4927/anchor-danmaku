@@ -243,7 +243,7 @@ fun RoomScreen(
                 .padding(paddingValues)
                 .padding(horizontal = 12.dp, vertical = 10.dp),
         ) {
-            val wideLayout = maxWidth >= 900.dp
+            val wideLayout = maxWidth >= 900.dp || maxWidth > maxHeight
             if (wideLayout) {
                 Row(
                     modifier = Modifier.fillMaxSize(),

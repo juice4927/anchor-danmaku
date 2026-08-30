@@ -88,7 +88,7 @@ fun SettingsScreen(
                 .padding(horizontal = 12.dp, vertical = 10.dp)
                 .testTag(UiTags.SettingsRoot),
         ) {
-            val wide = maxWidth >= 760.dp
+            val wide = maxWidth >= 760.dp || maxWidth > maxHeight
             if (wide) {
                 Row(
                     modifier = Modifier.fillMaxSize(),
