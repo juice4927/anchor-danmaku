@@ -40,3 +40,6 @@ docs/review_live_real_room*.png
 docs/review_fixed_room.png
 docs/app_mark_crop.png
 docs/ai_concepts/
+
+# 本地产物（不入库）
+dist/
