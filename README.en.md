@@ -3,6 +3,7 @@
 # Anchor Danmaku (主播弹幕台)
 
 [![CI](https://github.com/juice4927/anchor-danmaku/actions/workflows/ci.yml/badge.svg)](https://github.com/juice4927/anchor-danmaku/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/juice4927/anchor-danmaku)](https://github.com/juice4927/anchor-danmaku/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Android%208.0%2B-green.svg)](#requirements)
 [![Kotlin](https://img.shields.io/badge/kotlin-1.9.24-7F52FF.svg)](https://kotlinlang.org)
@@ -62,6 +63,10 @@ See [docs/architecture.md](docs/architecture.md) and [docs/implementation-log.md
 
 - Android 8.0 (API 26)+
 - Network access to Bilibili's public danmaku service
+
+### Direct download
+
+Grab the latest APK from [Releases](https://github.com/juice4927/anchor-danmaku/releases/latest) (SHA-256 checksums attached to each release).
 
 ## Building from source
 

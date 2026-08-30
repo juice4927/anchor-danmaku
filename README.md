@@ -3,6 +3,7 @@
 # 主播弹幕台 (Anchor Danmaku)
 
 [![CI](https://github.com/juice4927/anchor-danmaku/actions/workflows/ci.yml/badge.svg)](https://github.com/juice4927/anchor-danmaku/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/juice4927/anchor-danmaku)](https://github.com/juice4927/anchor-danmaku/releases/latest)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Android%208.0%2B-green.svg)](#系统要求)
 [![Kotlin](https://img.shields.io/badge/kotlin-1.9.24-7F52FF.svg)](https://kotlinlang.org)
@@ -64,6 +65,10 @@ app (Android/Compose/DataStore)
 
 - Android 8.0（API 26）及以上
 - 网络可访问 B 站公开弹幕服务
+
+### 直接下载安装
+
+从 [Releases](https://github.com/juice4927/anchor-danmaku/releases/latest) 下载最新 APK 安装即可（附 SHA-256 校验和）。
 
 ## 从源码构建
 
