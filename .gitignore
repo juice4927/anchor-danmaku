@@ -14,3 +14,28 @@ keystore/
 captures/
 .externalNativeBuild/
 .cxx/
+
+# 会话与调试产物（不入库）
+.playwright-mcp/
+.gradle-user-review/
+.zcode/
+build_log.txt
+test_log.txt
+NUL
+reference_*.png
+
+# docs 内的临时截图/UI dump/中间产物（正式截图在 docs/screenshots/）
+docs/installed_final.apk
+docs/after_*.xml
+docs/mumu_heads_up_original.txt
+docs/release_*.png
+docs/release_*.xml
+docs/shot_*.png
+docs/ui_*.png
+docs/ui_*.xml
+docs/icon_concept_preview.png
+docs/icon_runtime_screen.png
+docs/review_tmp.png
+docs/review_live_real_room*.png
+docs/review_fixed_room.png
+docs/app_mark_crop.png
